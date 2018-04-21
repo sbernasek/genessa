@@ -41,6 +41,17 @@ cdef class cHill(cActiveInputs):
     # methods
     cdef double get_rate(self, array states, array input_value)
 
+cdef class cCoupling(cActive):
+    cdef int R # number of repressors
+    cdef double k # rate constant
+    cdef long[:] propensity # propensity
+    cdef double a # coupling strength
+    cdef double w # edge weights
+    cdef cRepressor[:] repressors
+
+    # methods
+    cdef double get_rate(self, array states, array input_value)
+
 cdef class cRateFunction:
 
     # attributes
@@ -48,7 +59,8 @@ cdef class cRateFunction:
     cdef cHill[:] hill
     cdef cSumRxn[:] icontrol
     cdef cSumRxn[:] pcontrol
-    cdef int n_massaction, n_hill, n_icontrol, n_pcontrol
+    cdef cCoupling[:] coupling
+    cdef int n_massaction, n_hill, n_icontrol, n_pcontrol, n_coupling
     cdef array rates
 
     # methods

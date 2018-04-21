@@ -1,22 +1,13 @@
 __author__ = 'Sebi'
 
+from .solver.ssa import Solver as cySolver
 from .timeseries import TimeSeries
 from .parameters import conditions
-from .solver.ssa import choose_rxn, float_sum, min_float, min_int
-from .solver.rxns import RateFunction as RateFunction
-from .solver.ssa import Solver as cySolver
 from copy import deepcopy
 import numpy as np
-import random as rd
-import scipy.integrate
-import scipy.optimize
-import itertools
-import functools
-import warnings
-import matplotlib.pyplot as plt
-from scipy import interpolate
-import array
 import types
+
+#import warnings
 #warnings.filterwarnings('error')
 
 

@@ -3,6 +3,11 @@ from distutils.extension import Extension
 from Cython.Distutils import build_ext
 from numpy import get_include
 
+import sys, os
+modules_path = '../../rxndiffusion'
+if modules_path not in sys.path:
+    sys.path.insert(0, modules_path)
+
 ext_modules = [
     Extension("solver.rxns", ["solver/rxns.pyx"], include_dirs=['.']),
     Extension("solver.cyRNG", ["solver/cyRNG.pyx", "solver/SimpleRNG.cpp"], language="c++", include_dirs=['.']),

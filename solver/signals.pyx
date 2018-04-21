@@ -7,7 +7,20 @@ from cpython.array cimport array
 from cpython.array cimport copy as copyarray
 from array import array
 
-cdef class cSquarePulse:
+cdef class cSignal:
+    """ Class defines a single channel square pulse signal. """
+
+    def __init__(self, on=1):
+        self.on = array('d', np.array([on], dtype=np.float64).flatten())
+
+    def __call__(self, double t):
+        return self.get_signal(t)
+
+    cdef array get_signal(self, double t):
+        return self.on
+
+
+cdef class cSquarePulse(cSignal):
     """ Class defines a single channel square pulse signal. """
 
     def __init__(self, t_on=0., t_off=3., off=0, on=1):
@@ -27,7 +40,7 @@ cdef class cSquarePulse:
         return self.off
 
 
-cdef class cMultiPulse:
+cdef class cMultiPulse(cSignal):
     """ Class defines a multi channel square pulse signal. """
 
     def __init__(self, t_on, t_off, off, on):
@@ -51,3 +64,23 @@ cdef class cMultiPulse:
                 if t >= self.t_on.data.as_doubles[index]:
                     values.data.as_doubles[index] = self.on.data.as_doubles[index]
         return values
+
+
+cdef class cSquareWave(cSignal):
+    """ Class defines a single channel square wave signal. """
+
+    def __init__(self, period=1., off=0., on=1.):
+        self.period = period
+        self.off = array('d', np.array([off], dtype=np.float64).flatten())
+        self.on = array('d', np.array([on], dtype=np.float64).flatten())
+
+    def __call__(self, double t):
+        return self.get_signal(t)
+
+    cdef array get_signal(self, double t):
+        """ Get pulse value at a given time. """
+
+        if (t // self.period) % 2 == 0:
+            return self.off
+        else:
+            return self.on

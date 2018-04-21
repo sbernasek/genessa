@@ -1,15 +1,22 @@
 from cpython.array cimport array
 from array import array
 
-
-cdef class cSquarePulse:
-    cdef double t_on, t_off
-    cdef array off, on
+cdef class cSignal:
+    cdef array on
     cdef array get_signal(self, double t)
 
+cdef class cSquarePulse(cSignal):
+    cdef double t_on, t_off
+    cdef array off
+#    cdef array get_signal(self, double t)
 
-cdef class cMultiPulse:
+cdef class cMultiPulse(cSignal):
     cdef long I
     cdef array t_on, t_off
-    cdef array off, on
-    cdef array get_signal(self, double t)
+    cdef array off
+#    cdef array get_signal(self, double t)
+
+cdef class cSquareWave(cSignal):
+    cdef double period
+    cdef array off
+#    cdef array get_signal(self, double t)

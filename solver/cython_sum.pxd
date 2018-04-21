@@ -1,28 +1,28 @@
 from cpython.array cimport array
 from array import array
 
-cdef inline double sum_double_arr(array arr, int length):
+cdef inline double sum_double_arr(array arr, int length) nogil:
     cdef double _sum = arr.data.as_doubles[0]
     cdef int i
     for i in xrange(1, length):
         _sum += arr.data.as_doubles[i]
     return _sum
 
-cdef inline long sum_long_arr(array arr, int length):
+cdef inline long sum_long_arr(array arr, int length) nogil:
     cdef long _sum = arr.data.as_longs[0]
     cdef int i
     for i in xrange(1, length):
         _sum += arr.data.as_longs[i]
     return _sum
 
-cdef inline int sum_int_arr(array arr, int length):
+cdef inline int sum_int_arr(array arr, int length) nogil:
     cdef int _sum = arr.data.as_ints[0]
     cdef int i
     for i in xrange(1, length):
         _sum += arr.data.as_ints[i]
     return _sum
 
-cdef inline long min_long_arr(array arr, int length):
+cdef inline long min_long_arr(array arr, int length) nogil:
     cdef int i
     cdef long val
     cdef long min = arr.data.as_longs[0]
@@ -32,28 +32,28 @@ cdef inline long min_long_arr(array arr, int length):
             min = val
     return min
 
-cdef inline double compute_float_sum(double[:] y, int N):
+cdef inline double compute_float_sum(double[:] y, int N) nogil:
     cdef double x = y[0]
     cdef int i
     for i in xrange(1,N):
         x += y[i]
     return x
 
-cdef inline int compute_int_sum(int[:] y, int N):
+cdef inline int compute_int_sum(int[:] y, int N) nogil:
     cdef int x = y[0]
     cdef int i
     for i in xrange(1,N):
         x += y[i]
     return x
 
-cdef inline long compute_long_sum(long[:] y, int N):
+cdef inline long compute_long_sum(long[:] y, int N) nogil:
     cdef long x = y[0]
     cdef int i
     for i in xrange(1,N):
         x += y[i]
     return x
 
-cdef inline double get_min_float(double[:] array, int N):
+cdef inline double get_min_float(double[:] array, int N) nogil:
     """ Returns min value from array of N floats """
     cdef int i
     cdef double val
@@ -64,7 +64,7 @@ cdef inline double get_min_float(double[:] array, int N):
             min = val
     return min
 
-cdef inline long get_min_int(long[:] array, int N):
+cdef inline long get_min_int(long[:] array, int N) nogil:
     """ Returns min value from array of N integers """
     cdef int i
     cdef long val

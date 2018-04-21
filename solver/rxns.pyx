@@ -4,8 +4,9 @@ from rxndiffusion.reactions import Reaction as pyMassAction
 from rxndiffusion.reactions import EnzymaticReaction as pyHill
 from rxndiffusion.reactions import IntegralController as pyIControl
 from rxndiffusion.reactions import ProportionalController as pyPControl
+from rxndiffusion.reactions import Coupling as pyCoupling
 
-from rxns cimport cMassAction, cRepressor, cHill, cRateFunction
+from rxns cimport cMassAction, cRepressor, cHill, cCoupling, cRateFunction
 import numpy as np
 cimport numpy as np
 cimport cython
@@ -199,35 +200,97 @@ cdef class cHill(cActiveInputs):
         return rate
 
 
+cdef class cCoupling(cActive):
+    def __init__(self, int N, long[:] active, int R,
+                 double k, long[:] propensity,
+                 double a, double w, cRepressor[:] c_reps):
+        cActive.__init__(self, N, active)
+        self.R
+        self.k = k
+        self.propensity = propensity
+        self.a = a
+        self.w = w
+        self.repressors = c_reps
+
+    cdef double get_rate(self, array states, array input_value):
+        """ Get reaction rate for coupling mechanism. """
+
+        cdef double rate = 0
+        cdef int j
+        cdef int s_ind
+        cdef double available = 1
+        cdef cRepressor repressor
+
+        # if coupled
+        if self.N > 0:
+
+            # get species dependencies
+            for j in xrange(self.N):
+                s_ind = self.active[j]
+                rate += self.propensity[s_ind]*states.data.as_longs[s_ind]
+
+            # apply constants
+            rate *= (self.a*self.w / (1+self.w * (self.N - 1)))
+            rate += self.k
+            if rate < 0:
+                rate = 0.
+
+        # if no coupling
+        else:
+            rate = self.k
+
+        # compute repressor occupancy
+        for j in xrange(self.R):
+            repressor = self.repressors[j]
+            rate *= (1 - repressor.get_occupancy(states, input_value))
+
+        return rate
+
+
 cdef class cRateFunction:
 
-    def __init__(self, cMassAction[:] massaction, cHill[:] hill, cSumRxn[:] icontrol, cSumRxn[:] pcontrol):
+    def __init__(self,
+                 cCoupling[:] coupling,
+                 cMassAction[:] massaction,
+                 cHill[:] hill,
+                 cSumRxn[:] icontrol,
+                 cSumRxn[:] pcontrol):
 
         # store reactions
+        self.coupling = coupling
         self.massaction = massaction
         self.hill = hill
         self.icontrol = icontrol
         self.pcontrol = pcontrol
 
         # determine number of reactions of each type
+        self.n_coupling = len(coupling)
         self.n_massaction = len(massaction)
         self.n_hill = len(hill)
         self.n_icontrol = len(icontrol)
         self.n_pcontrol = len(pcontrol)
 
         # initialize rates for all reactions
-        n = self.n_massaction + self.n_hill + self.n_icontrol + self.n_pcontrol
+        n = self.n_coupling + self.n_massaction + self.n_hill + self.n_icontrol + self.n_pcontrol
         self.rates = array('d', np.zeros(n, dtype=np.float64))
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
     cdef array get_rxn_rates(self, array states, array input_value, array cumulative):
+        cdef cCoupling coupling_rxn
         cdef cMassAction rxn
         cdef cHill hill_rxn
         cdef cSumRxn controller
         cdef double rate
         cdef int index = 0
         cdef int i
+
+        # Coupling class
+        for i in xrange(self.n_coupling):
+            coupling_rxn = self.coupling[i]
+            rate = coupling_rxn.get_rate(states, input_value)
+            self.rates.data.as_doubles[index] = rate
+            index += 1
 
         # EnzymaticReaction class
         for i in xrange(self.n_hill):
@@ -356,6 +419,36 @@ class SumReaction:
     def get_rate(self, states):
         return self.c_rxn.get_rate(states)
 
+class Coupling:
+    """ Typecasting for cCoupling instances. """
+    def __init__(self, rxn):
+        """
+        Args:
+        rxn (nevosim.Coupling instance)
+        """
+        N = int(rxn.active_species.size)
+        active = rxn.active_species.astype(np.int64)
+        propensity = rxn.propensity.astype(int)
+        k = rxn.rate_constant[0].astype(np.float64)
+        a = np.float64(rxn.a)
+        w = np.float64(rxn.w)
+
+        # get repressor objects
+        if len(rxn.repressors) > 0:
+            reps = np.array([Repressor(Rep).c_rep for Rep in rxn.repressors])
+        else:
+            reps = np.array([], dtype=np.obj2sctype(cRepressor))
+        R = reps.size
+
+        # get reaction object
+        cdef cCoupling c_rxn
+        c_rxn = cCoupling(N, active, R, k, propensity, a, w, reps)
+        self.c_rxn = c_rxn
+
+    def get_rate(self, states, input_value):
+        return self.c_rxn.get_rate(states, input_value)
+
+
 class RateFunction:
     """ Python wrapper for c-based reaction rate computation."""
     def __init__(self, rxns):
@@ -365,7 +458,7 @@ class RateFunction:
         """
 
         # sort reactions alphabetically by class name to match stoichiometry
-        massaction, hill, pcontrol, icontrol = [], [], [], []
+        massaction, hill, pcontrol, icontrol, coupling = [], [], [], [], []
         for rxn in rxns:
             if rxn.__class__ == pyMassAction:
                 massaction.append(MassActionReaction(rxn).c_rxn)
@@ -375,6 +468,8 @@ class RateFunction:
                 icontrol.append(SumReaction(rxn).c_rxn)
             elif rxn.__class__ == pyPControl:
                 pcontrol.append(SumReaction(rxn).c_rxn)
+            elif rxn.__class__ == pyCoupling:
+                coupling.append(Coupling(rxn).c_rxn)
             else:
                 raise ValueError('{} reaction type not recognized.'.format(rxn.__class__.__name__))
 
@@ -383,9 +478,10 @@ class RateFunction:
         hill = np.array(hill, dtype=np.obj2sctype(cHill))
         icontrol = np.array(icontrol, dtype=np.obj2sctype(cSumRxn))
         pcontrol = np.array(pcontrol, dtype=np.obj2sctype(cSumRxn))
+        coupling = np.array(coupling, dtype=np.obj2sctype(cCoupling))
 
         # instantiate cReactions object
-        self.cRateFunction = cRateFunction(massaction, hill, icontrol, pcontrol)
+        self.cRateFunction = cRateFunction(coupling, massaction, hill, icontrol, pcontrol)
 
     def __call__(self, states, input_value, cumulative):
         """

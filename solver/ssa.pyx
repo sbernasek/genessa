@@ -9,7 +9,7 @@ from libc.math cimport log, fabs, ceil
 import numpy as np
 cimport numpy as np
 cimport cython
-from rxndiffusion.solver.signals cimport cSquarePulse, cMultiPulse
+from rxndiffusion.solver.signals cimport cSquarePulse, cMultiPulse, cSquareWave, cSignal
 
 from cpython.array cimport array, clone
 from cpython.array cimport copy as copyarray
@@ -72,7 +72,7 @@ cdef class cSolver:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cpdef solve(self, long[::1] ic, cMultiPulse input_function,
+    cpdef solve(self, long[::1] ic, cSignal input_function,
                 double[::1] integrator_ic,
                 double dt=1., double duration=100, bint use_pure_ssa=0):
         """
@@ -94,7 +94,7 @@ cdef class cSolver:
         # initialize times and state lists, simulation counters
         cdef double t = 0.
         cdef array states = array('l', ic)
-        cdef array new_states
+        cdef array new_states = array('l', ic)
         cdef array cumulative = array('d', integrator_ic)
 
         # for input checking loop
@@ -125,7 +125,6 @@ cdef class cSolver:
         cdef array input_value, new_input_value
         cdef array rxn_rates
         cdef double total_rxn_rate, total_critical_rxn_rate
-        cdef array rxn_extents = clone(self.int_template, self.network.M, zero=1)
         cdef int rxn_fired
         cdef array critical_rxns, non_critical_rxns
         cdef double candidate_leap, alternate_leap, tau
@@ -174,15 +173,11 @@ cdef class cSolver:
                             t += dt
                     continue
 
-            # initialize reaction extents
-            for index in xrange(self.network.M):
-                rxn_extents.data.as_longs[index] = self.mzeros.data.as_longs[index]
-
             # if pure_ssa_count is active take a single SSA step
             if pure_ssa_count > 0:
                 tau = get_timestep(total_rxn_rate)
                 rxn_fired = choose_rxn(rxn_rates, self.network.M)
-                rxn_extents.data.as_longs[rxn_fired] = 1
+                self.fire_reaction(rxn_fired, 1, new_states)
 
                 # if using pure SSA, keep counter at 1
                 if use_pure_ssa == 0:
@@ -227,18 +222,21 @@ cdef class cSolver:
                     else:
                         # fire critical reaction
                         tau = alternate_leap
-                        rxn_extents = self.fire_critical_rxns(rxn_rates, critical_rxns, rxn_extents)
+                        rxn_fired = self.choose_critical_rxn(rxn_rates, critical_rxns)
+                        self.fire_reaction(rxn_fired, 1, new_states)
 
-                    # use tau leap for non critical reactions
-                    rxn_extents = self.fire_noncritical_rxns(rxn_rates, non_critical_rxns, tau, rxn_extents)
-
-            # update states
-            new_states = self.get_new_states(states, rxn_extents)
+                    # use tau leap to fire non critical reactions
+                    self.fire_noncritical_rxns(rxn_rates, non_critical_rxns, tau, new_states)
 
             # check if step was too large
             if cython_sum.min_long_arr(new_states, self.network.N) < 0:
                 candidate_leap = tau / 2
                 shrink_step_size = 1
+
+                # unfire reactions
+                for i in xrange(self.network.N):
+                    new_states.data.as_longs[i] = states.data.as_longs[i]
+
                 continue
             else:
                 shrink_step_size = 0
@@ -265,25 +263,44 @@ cdef class cSolver:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef array get_new_states(self, array states, array extents):
-        cdef array new_states
-        cdef int i, j
-        cdef long extent
+    cdef int choose_critical_rxn(self, array rates, array critical):
+        """ Choose a single critical reaction to be fired. """
+        cdef array critical_rates = copyarray(rates)
+        cdef int i
+        cdef int rxn
 
-        # copy current states
-        new_states = clone(self.int_template, self.network.N, zero=1)
+        # if reaction is not critical, zero its rate
+        for i in xrange(self.network.M):
+            if critical.data.as_longs[i] == 0:
+                critical_rates.data.as_doubles[i] = 0.
+
+        if cython_sum.sum_double_arr(critical_rates, self.network.M) > 0.:
+            rxn = choose_rxn(critical_rates, self.network.M)
+
+        return rxn
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef fire_reaction(self, int rxn, int extent, array states):
+        cdef int i
+        cdef int coefficient
+
+        # TODO: specify dependent states (nonzero stoich)
         for i in xrange(self.network.N):
-            new_states.data.as_longs[i] = states.data.as_longs[i]
+            coefficient = self.network.stoichiometry.data.as_longs[i*self.network.M+rxn]
+            if coefficient != 0:
+                states.data.as_longs[i] += (coefficient * extent)
 
-        # apply reactions
-        for j in xrange(self.network.M):
-            extent = extents.data.as_longs[j]
-
-            # skip reactions that did not fire
-            if extent != 0:
-                for i in xrange(self.network.N):
-                    new_states.data.as_longs[i] += (self.network.stoichiometry.data.as_longs[i*self.network.M+j] * extent)
-        return new_states
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef fire_noncritical_rxns(self, array rates, array non_critical, double tau, array states):
+        """ Draw extents for noncritical reactions from Poisson dist. """
+        cdef int rxn, extent
+        for rxn in xrange(self.network.M):
+            if non_critical.data.as_longs[rxn] == 1:
+                if rates.data.as_doubles[rxn] != 0:
+                    extent = self.rng.GetPoisson(rates.data.as_doubles[rxn]*tau)
+                    self.fire_reaction(rxn, extent, states)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -372,36 +389,6 @@ cdef class cSolver:
 
         return candidate_leap
 
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef array fire_noncritical_rxns(self, array rxn_rates, array non_critical, double tau, array rxn_extents):
-        """ Draw extents for noncritical reactions from Poisson dist. """
-        cdef int i
-        for i in xrange(self.network.M):
-            if non_critical.data.as_longs[i] == 1:
-                if rxn_rates.data.as_doubles[i] != 0:
-                    rxn_extents.data.as_longs[i] = self.rng.GetPoisson(rxn_rates.data.as_doubles[i]*tau)
-        return rxn_extents
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef array fire_critical_rxns(self, array rxn_rates, array critical, array rxn_extents):
-        """ Fires a single critical reaction. """
-
-        cdef array critical_rxn_rates = copyarray(rxn_rates)
-        cdef int i
-        cdef int rxn_fired
-
-        # if reaction is not critical, zero its rate
-        for i in xrange(self.network.M):
-            if critical.data.as_longs[i] == 0:
-                critical_rxn_rates.data.as_doubles[i] = 0.
-
-        if cython_sum.sum_double_arr(critical_rxn_rates, self.network.M) > 0.:
-            rxn_fired = choose_rxn(critical_rxn_rates, self.network.M)
-            rxn_extents.data.as_longs[rxn_fired] = 1
-
-        return rxn_extents
 
 cdef inline double get_timestep(double total_rxn_rate):
     """ Sample time until next reaction from exponential distribution. """
@@ -410,7 +397,7 @@ cdef inline double get_timestep(double total_rxn_rate):
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cpdef int choose_rxn(array rates, int num_rxns):
+cdef int choose_rxn(array rates, int num_rxns) nogil:
     """ Probabilistically selects reaction based on rate. """
     cdef double rate, r
     cdef int index = 0
@@ -425,19 +412,19 @@ cpdef int choose_rxn(array rates, int num_rxns):
         index += 1 # bug - remove on next compilation. doesnt affect anything
     return index - 1
 
-cpdef double float_sum(np.ndarray[np.float_t, ndim=1] vals):
+cdef double float_sum(np.ndarray[np.float_t, ndim=1] vals):
     """ Return sum of an array of type double. """
     return cython_sum.compute_float_sum(vals, vals.size)
 
-cpdef long int_sum(np.ndarray[np.int_t, ndim=1] vals):
+cdef long int_sum(np.ndarray[np.int_t, ndim=1] vals):
     """ Return sum of an array of type double. """
     return cython_sum.compute_long_sum(vals, vals.size)
 
-cpdef double min_float(np.ndarray[np.float_t, ndim=1] vals):
+cdef double min_float(np.ndarray[np.float_t, ndim=1] vals):
     """ Return minimum from array of type long. """
     return cython_sum.get_min_float(vals, vals.size)
 
-cpdef long min_int(np.ndarray[np.int_t, ndim=1] vals):
+cdef long min_int(np.ndarray[np.int_t, ndim=1] vals):
     """ Return minimum from array of type long. """
     return cython_sum.get_min_int(vals, vals.size)
 
@@ -453,7 +440,7 @@ cdef array get_logical_not(array arr, int arr_size):
             opp.data.as_longs[i] = 1
     return opp
 
-cdef double sum_array_subset(array arr, array mask, int arr_size):
+cdef double sum_array_subset(array arr, array mask, int arr_size) nogil:
     """ Sum a slice of a 1d array of type double. """
     cdef double subset_sum = 0
     cdef int index

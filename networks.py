@@ -1,7 +1,7 @@
 __author__ = 'Sebi'
 
 
-from .reactions import Reaction, EnzymaticReaction, SumReaction
+from .reactions import Reaction, EnzymaticReaction, SumReaction, Coupling
 import numpy as np
 import copy as copy
 from tabulate import tabulate
@@ -91,7 +91,7 @@ class Network:
                 rxn.input_dependence = np.zeros(self.input_size)
 
             # resize repressors
-            if type(rxn) == EnzymaticReaction:
+            if type(rxn) in (EnzymaticReaction, Coupling):
                 for repressor in rxn.repressors:
                     if repressor.input_dependence is None:
                         repressor.input_dependence = np.zeros(self.input_size)
@@ -571,6 +571,8 @@ class Graph:
                 rate_law = self.get_enzymatic_rate_law(rxn)
             elif type(rxn) == SumReaction:
                 rate_law = self.get_sum_rxn_rate_law(rxn)
+            elif type(rxn) == Coupling:
+                rate_law = self.get_coupling_rate_law(rxn)
             else:
                 rate_law = self.get_mass_action_rate_law(rxn)
 
@@ -598,20 +600,39 @@ class Graph:
                 name = 'Not Named'
             else:
                 name = rxn.rxn_type
-            rxn_table.append([name, reactants, products, rate_law, rate_constant, sensitivities])
+            rxn_table.append([name, reactants, products, rate_law, rate_constant])
 
             # for enzymatic reactions, add any repressors
-            if type(rxn) is EnzymaticReaction:
+            if type(rxn) in (EnzymaticReaction, Coupling):
                 for repressor in rxn.repressors:
-                    repressor_name = rxn.rxn_type + ' repression'
+                    repressor_name = 'Repression of ' + rxn.rxn_type
                     repressor_rate_law = '1 - ' + self.get_enzymatic_rate_law(repressor)
                     rxn_table.append([repressor_name, '', '', repressor_rate_law, '', 'NA'])
 
         # print tables
-        print(tabulate(rxn_table, headers=["Rxn", "Reactants", "Products", "Propensity", "Parameter", "Dependencies"], numalign='center', stralign='center'))
+        print(tabulate(rxn_table, headers=["Rxn", "Reactants", "Products", "Propensity", "Parameter"], numalign='center', stralign='center'))
 
     def get_sum_rxn_rate_law(self, rxn):
         rate_law = '[{:d}] - [{:d}]'.format(np.where(rxn.propensity == 1)[0][0], np.where(rxn.propensity == -1)[0][0])
+        return rate_law
+
+    def get_coupling_rate_law(self, rxn):
+        if rxn.propensity.max() == 0:
+            rate_law = ''
+        else:
+            base = np.where(rxn.propensity>0)[0][0]
+            neighbors = np.where(rxn.propensity<0)[0]
+            weight = (rxn.a * rxn.w) / (1+rxn.w*len(neighbors))
+
+            if len(neighbors) > 1:
+                coeff = '{:d}'.format(len(neighbors))
+            else:
+                coeff = ''
+
+            rate_law = '{:0.3f} x ({:s}[{:d}]'.format(weight, coeff, base)
+            for n in neighbors:
+                rate_law += ' - [{:d}]'.format(n)
+            rate_law += ')'
         return rate_law
 
     def get_mass_action_rate_law(self, rxn):

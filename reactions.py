@@ -215,9 +215,7 @@ class SecondOrderReaction(Reaction):
 
 class EnzymaticReaction:
 
-    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None,
-                 rate_constant=1, k_m=1, hill=1, baseline=0, repressors=None, rxn_type='hill',
-                 temperature_sensitive=False, atp_sensitive=False, ribosome_sensitive=False):
+    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None, rate_constant=1, k_m=1, hill=1, baseline=0, repressors=None, rxn_type='hill', temperature_sensitive=False, atp_sensitive=False, ribosome_sensitive=False):
         """
         Class describes a single hill-kinetic pathway.
 
@@ -251,8 +249,12 @@ class EnzymaticReaction:
         # convert input dependence to array
         if type(input_dependence) == int:
             input_dependence = [input_dependence]
-        self.input_dependence = np.array(input_dependence, dtype=np.float64)
+        if input_dependence is not None:
+            self.input_dependence = np.array(input_dependence, dtype=np.int64)
+        else:
+            self.input_dependence = np.zeros(1, dtype=np.int64)
 
+        # set constants
         self.rate_constant = np.array([rate_constant], dtype=float)
         self.k_m = k_m
         self.n = hill
@@ -275,6 +277,28 @@ class EnzymaticReaction:
         self.temperature_sensitive = temperature_sensitive
         self.atp_sensitive = atp_sensitive
         self.ribosome_sensitive = ribosome_sensitive
+
+    def shift(self, shift):
+        """ Expand dimensionality of reaction. """
+
+        s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
+        p = np.hstack((np.zeros(shift, dtype=np.float64), self.propensity))
+        i = self.input_dependence
+
+        # shift repressors
+        repressors = [rep.shift(shift) for rep in self.repressors]
+
+        kw = dict(rate_constant=self.rate_constant[0],
+                  k_m=self.k_m,
+                  hill=self.n,
+                  baseline=self.baseline,
+                  repressors=repressors,
+                  rxn_type=self.rxn_type,
+                  temperature_sensitive=self.temperature_sensitive,
+                  atp_sensitive=self.atp_sensitive,
+                  ribosome_sensitive=self.ribosome_sensitive)
+
+        return EnzymaticReaction(s, p, i, **kw)
 
     def add_promoter(self, species):
         """
@@ -385,7 +409,10 @@ class EnzymaticRepressor:
         # convert input dependence to array
         if type(input_dependence) == int:
             input_dependence = [input_dependence]
-        self.input_dependence = np.array(input_dependence, dtype=np.float64)
+        if input_dependence is not None:
+            self.input_dependence = np.array(input_dependence, dtype=np.int64)
+        else:
+            self.input_dependence = np.zeros(1, dtype=np.int64)
 
         self.k_m = k_m
         self.n = hill
@@ -394,6 +421,13 @@ class EnzymaticRepressor:
         self.active_substrates = np.where(self.propensity != 0)[0]
         self._propensity = self.propensity[self.active_substrates]
         self.active_inputs = np.where(self.input_dependence != 0)[0]
+
+    def shift(self, shift):
+        """ Expand dimensionality of reaction. """
+        p = np.hstack((np.zeros(shift, dtype=np.float64), self.propensity))
+        i = self.input_dependence
+        kw = dict(k_m=self.k_m, hill=self.n)
+        return EnzymaticRepressor(p, i, **kw)
 
     def get_occupancy(self, states, input_state):
         """
@@ -496,8 +530,91 @@ class SumReaction:
 
         return rate
 
+
 class ProportionalController(SumReaction):
     pass
 
+
 class IntegralController(SumReaction):
     pass
+
+
+class Coupling:
+
+    def __init__(self, stoichiometry=None, propensity=None, k=1, a=1, w=1,repressors=None, rxn_type='coupling'):
+        """
+        Class describes a single coupling pathway.
+
+        Parameters:
+            stoichiometry (array like) - list of stoichiometric coefficients for all species
+            propensity (array like) - weights for coupling comparison
+            k (float) - baseline rxn rate
+            a (float) - coupling strength
+            w (float) - edge weights
+            repressors (list) - list of repressor objects
+            rxn_type (str) - name of reaction
+        """
+
+        self.rxn_type = rxn_type
+
+        # define stoichiometry
+        if stoichiometry is None:
+            stoichiometry = [0]
+        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
+
+        # define input dependence (not used)
+        self.input_dependence = np.zeros(1, dtype=np.int64)
+
+        # define rate law parameters
+        if propensity is None:
+            propensity = np.zeros(len(stoichiometry))
+        self.propensity = np.array(propensity, dtype=np.float64)
+
+        # set constants
+        self.rate_constant = np.array([k], dtype=float)
+        self.a = a
+        self.w = w
+
+        # add repressors
+        if repressors is None:
+            self.repressors = []
+        else:
+            self.repressors = repressors
+        self.num_repressors = len(self.repressors)
+
+        # identify participating substrates
+        self.active_species = np.where(self.propensity != 0)[0]
+        self._propensity = self.propensity[self.active_species]
+
+        # assign reaction rate sensitivities
+        self.temperature_sensitive = True
+        self.atp_sensitive = False
+        self.ribosome_sensitive = False
+
+    def shift(self, shift):
+        """ Expand dimensionality of reaction. """
+
+        s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
+        p = np.hstack((np.zeros(shift, dtype=np.float64), self.propensity))
+
+        # shift repressors
+        repressors = [rep.shift(shift) for rep in self.repressors]
+
+        kw = dict(k=self.rate_constant[0],
+                  a=self.a,
+                  w=self.w,
+                  repressors=repressors,
+                  rxn_type=self.rxn_type)
+
+        return Coupling(s, p, **kw)
+
+    def add_repressor(self, repressor):
+        """
+        Adds repressor to reaction.
+
+        Parameters:
+            repressor (EnzymaticRepressor object) - repressor to be added to enzymatic reaction
+        """
+        self.repressors.append(repressor)
+        self.num_repressors += 1
+
