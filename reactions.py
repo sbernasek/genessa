@@ -215,7 +215,7 @@ class SecondOrderReaction(Reaction):
 
 class EnzymaticReaction:
 
-    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None, rate_constant=1, k_m=1, hill=1, baseline=0, repressors=None, rxn_type='hill', temperature_sensitive=False, atp_sensitive=False, ribosome_sensitive=False):
+    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None, rate_constant=1, k_m=1, hill=1, baseline=0, repressors=None, rxn_type='hill', rate_modifier=None, temperature_sensitive=False, atp_sensitive=False, ribosome_sensitive=False):
         """
         Class describes a single hill-kinetic pathway.
 
@@ -229,6 +229,7 @@ class EnzymaticReaction:
             baseline (float) - baseline reaction rate in absense of any substrate
             repressors (list) - list of repressor objects affecting reaction pathway
             rxn_type (str) - name of reaction
+            rate_modifier (array like) - coefficients by which input modules rate constant
             temperature_sensitive (bool) - if True, reaction rate is scalable with temperature
             atp_sensitive (bool) - if True, reaction rate is scalable with metabolic rate
             ribosome_sensitive (bool) - if True, reaction rate is scalable with translation capacity
@@ -268,10 +269,15 @@ class EnzymaticReaction:
             self.repressors = repressors
         self.num_repressors = len(self.repressors)
 
+        # set rate modifier
+        if rate_modifier is None:
+            rate_modifier = np.zeros(1, dtype=np.int64)
+        self.rate_modifier = rate_modifier
+
         # identify participating substrates
         self.active_substrates = np.where(self.propensity != 0)[0]
         self._propensity = self.propensity[self.active_substrates]
-        self.active_inputs = np.where(self.input_dependence != 0)[0]
+        self.active_inputs = np.where(np.logical_or(self.input_dependence != 0, self.rate_modifier != 0))[0]
 
         # assign reaction rate sensitivities
         self.temperature_sensitive = temperature_sensitive
@@ -294,6 +300,7 @@ class EnzymaticReaction:
                   baseline=self.baseline,
                   repressors=repressors,
                   rxn_type=self.rxn_type,
+                  rate_modifier=self.rate_modifier,
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
                   ribosome_sensitive=self.ribosome_sensitive)
@@ -343,7 +350,8 @@ class EnzymaticReaction:
             unoccupied_sites = functools.reduce(mul, [1-repressor.get_occupancy(states, input_state) for repressor in self.repressors])
 
         # get overall rate
-        rate = unoccupied_sites * (self.rate_constant * (substrate_activity**self.n)/(substrate_activity**self.n + self.k_m**self.n) + self.baseline)
+        k = self.rate_constant + (self.rate_modifier * input_state).sum()
+        rate = unoccupied_sites * (k * (substrate_activity**self.n)/(substrate_activity**self.n + self.k_m**self.n) + self.baseline)
 
         return rate
 
@@ -617,4 +625,61 @@ class Coupling:
         """
         self.repressors.append(repressor)
         self.num_repressors += 1
+
+    def get_rate(self, states, input_state, **kwargs):
+        """
+        Compute and return current rate of reaction.
+
+        Parameters:
+            states (np array) - current state values
+            input_state (np array) - current input value(s)
+
+        Returns:
+            rate (float) - rate of reaction
+        """
+
+        # get substrate activity
+        rate = (self._propensity * states[self.active_species]).sum()
+
+        # apply constants
+        N = self.active_species.size
+        rate *= (self.a*self.w / (1+self.w * (N - 1)))
+        rate += self.rate_constant[0]
+
+        # get repressor inhibition effects
+        unoccupied_sites = 1
+        if self.num_repressors > 0:
+            unoccupied_sites = functools.reduce(mul, [1-repressor.get_occupancy(states, input_state) for repressor in self.repressors])
+
+        # get overall rate
+        rate = unoccupied_sites * rate
+
+        return rate
+
+
+class RateFunction:
+    def __init__(self, network):
+        self.N = network.nodes.size
+        self.M = len(network.reactions)
+        self.reactions = network.reactions
+
+    def __call__(self, states, input_state):
+        return self.get_rates(states, input_state)
+
+    def get_rxn_rates(self, states, input_state):
+        rates = np.zeros(self.M, dtype=np.float64)
+        for i, rxn in enumerate(self.reactions):
+            rates[i] = rxn.get_rate(states, input_state)
+        return rates
+
+    def get_rates(self, states, input_state):
+        rates = np.zeros(self.N, dtype=np.float64)
+        for rxn in self.reactions:
+            rates += rxn.get_rate(states, input_state) * rxn.stoichiometry
+        return rates
+
+
+
+
+
 

@@ -56,10 +56,11 @@ class Network:
         self.stoichiometry = None
 
         # compile stoichiometric matrix
-        self.compile_stoichiometry()
+        #self.compile_stoichiometry()
+        #self.compile_rate_dependencies()
 
         # resize input channels
-        self.resize_inputs()
+        #self.resize_inputs()
 
     def sort_rxns(self):
         """
@@ -76,6 +77,21 @@ class Network:
         self.stoichiometry = np.zeros((self.nodes.size, len(self.reactions)), dtype=np.int64)
         for rxn_num, rxn in enumerate(self.reactions):
             self.stoichiometry[:, rxn_num] = rxn.stoichiometry
+
+    def compile_rate_dependencies(self):
+        """
+        Iterates through list of M reactions involving N species and I inputs and constructs M x N dependency matrices.
+        """
+
+        # compile state dependency matrix
+        self.state_dependence = np.zeros((len(self.reactions), self.nodes.size), dtype=np.int64)
+        for rxn_num, rxn in enumerate(self.reactions):
+            self.state_dependence[rxn_num, :] = rxn.propensity
+
+        # compile state dependency matrix
+        self.input_dependence = np.zeros((len(self.reactions), self.input_size), dtype=np.int64)
+        for rxn_num, rxn in enumerate(self.reactions):
+            self.input_dependence[rxn_num, :] = rxn.input_dependence
 
     def resize_inputs(self):
         """
@@ -569,15 +585,18 @@ class Graph:
             # for enzymatic reactions, use hill rate law
             if type(rxn) == EnzymaticReaction:
                 rate_law = self.get_enzymatic_rate_law(rxn)
+
             elif type(rxn) == SumReaction:
                 rate_law = self.get_sum_rxn_rate_law(rxn)
+
             elif type(rxn) == Coupling:
                 rate_law = self.get_coupling_rate_law(rxn)
+
             else:
                 rate_law = self.get_mass_action_rate_law(rxn)
 
-            # format rate constant
-            rate_constant = '{:2.5f}'.format(rxn.rate_constant[0])
+
+            rate_constant = self.format_rate_constant(rxn)
 
             # assemble rate sensitivities to environmental conditions
             sensitivities = ''
@@ -657,6 +676,14 @@ class Graph:
         rate_law = input_contribution + "".join(str(term) for term in propensity)
 
         return rate_law
+
+    def format_rate_constant(self, rxn):
+        rate_constant = '{:2.5f}'.format(rxn.rate_constant[0])
+        if type(rxn) == EnzymaticReaction:
+            for i, coeff in enumerate(rxn.rate_modifier):
+                if coeff != 0:
+                    rate_constant += ' + {:0.1f}[IN_{:d}]'.format(coeff, i)
+        return rate_constant
 
     def get_enzymatic_rate_law(self, rxn):
         """

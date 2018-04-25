@@ -37,7 +37,6 @@ cdef class cHill(cActiveInputs):
     cdef double k, k_m, n, baseline # rate constant, half maximal conc., hill coefficient, basal induction
     cdef double[:] propensity, input_dependence # propensity and input dep.
     cdef cRepressor[:] repressors
-    cdef double[:] rate_modifier
 
     # methods
     cdef double get_rate(self, array states, array input_value)
@@ -56,19 +55,13 @@ cdef class cCoupling(cActive):
 cdef class cRateFunction:
 
     # attributes
-    cdef cActive[:] rxns
-    cdef int M
-    cdef array rxn_types,
-    cdef dict rxn_map
-    cdef dict input_map
-    # cdef long[:] dependence,
-    # cdef long[:] input_dependence
+    cdef cMassAction[:] massaction
+    cdef cHill[:] hill
+    cdef cSumRxn[:] icontrol
+    cdef cSumRxn[:] pcontrol
+    cdef cCoupling[:] coupling
+    cdef int n_massaction, n_hill, n_icontrol, n_pcontrol, n_coupling
     cdef array rates
-    cdef double total_rate
 
     # methods
-    cdef array get_rxn_rates(self)
-    cdef update_input(self, array states, array input_value, array cumulative, int input_dim)
-    cdef update(self, array states, array input_value, array cumulative, int fired)
-    cdef update_all(self, array states, array input_value, array cumulative)
-    cdef set_rate(self, array states, array input_value, array cumulative, int rxn)
+    cdef array get_rxn_rates(self, array states, array input_value, array cumulative)

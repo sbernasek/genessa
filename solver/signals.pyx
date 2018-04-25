@@ -10,8 +10,9 @@ from array import array
 cdef class cSignal:
     """ Class defines a single channel square pulse signal. """
 
-    def __init__(self, on=1):
-        self.on = array('d', np.array([on], dtype=np.float64).flatten())
+    def __init__(self, on=0, ndim=1):
+        levels = [on for _ in range(ndim)]
+        self.on = array('d', np.array(levels, dtype=np.float64))
 
     def __call__(self, double t):
         return self.get_signal(t)
@@ -56,7 +57,7 @@ cdef class cMultiPulse(cSignal):
     cdef array get_signal(self, double t):
         """ Get pulse values at a given time. """
         cdef long index
-        cdef array values = copyarray(self.off) #clone(self.off, self.I, zero=0)
+        cdef array values = copyarray(self.off)
 
         # get input from each channel
         for index in xrange(self.I):

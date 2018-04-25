@@ -14,7 +14,6 @@ from rxndiffusion.solver.signals cimport cSquarePulse, cMultiPulse, cSquareWave,
 from cpython.array cimport array, clone
 from cpython.array cimport copy as copyarray
 from array import array
-from copy import deepcopy
 
 
 cdef class cNetwork:
@@ -24,9 +23,8 @@ cdef class cNetwork:
     cdef long[:] reactant_species
     cdef int num_reactant_species
     cdef cRateFunction rate_function
-    cdef dict stoich
 
-    def __init__(self, int N, int M, int I, array stoichiometry, long[:] min_coeff_per_rxn, long[:] reactant_species, int num_reactant_species, cRateFunction rate_function, dict stoich_dict):
+    def __init__(self, int N, int M, int I, array stoichiometry, long[:] min_coeff_per_rxn, long[:] reactant_species, int num_reactant_species, cRateFunction rate_function):
         self.N = N
         self.M = M
         self.I = I
@@ -35,32 +33,11 @@ cdef class cNetwork:
         self.reactant_species = reactant_species
         self.num_reactant_species = num_reactant_species
         self.rate_function = rate_function
-        self.stoich = stoich_dict
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef array get_rxn_rates(self):
-        return self.rate_function.get_rxn_rates()
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef double get_total_rate(self):
-        return self.rate_function.total_rate
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef update_all(self, array states, array input_value, array cumulative):
-        return self.rate_function.update_all(states, input_value, cumulative)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef update_input(self, array states, array input_value, array cumulative, int dim):
-        return self.rate_function.update_input(states, input_value, cumulative, dim)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef update(self, array states, array input_value, array cumulative, int rxn_fired):
-        return self.rate_function.update(states, input_value, cumulative, rxn_fired)
+    cdef array get_rxn_rates(self, array states, array input_value, array cumulative):
+        return self.rate_function.get_rxn_rates(states, input_value, cumulative)
 
 
 cdef class cSolver:
@@ -69,6 +46,10 @@ cdef class cSolver:
     cdef array mzeros
     cdef array int_template
     cdef array float_template
+    cdef double epsilon
+    cdef int nc_threshold
+    cdef double separation
+    cdef int holding_period
 
     def __init__(self, cNetwork network):
 
@@ -83,24 +64,19 @@ cdef class cSolver:
         self.int_template = array('l', np.zeros(self.network.N, dtype=np.int64))
         self.float_template = array('d', np.zeros(self.network.N, dtype=np.float64))
 
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cpdef ssa(self, long[::1] ic, cSignal input_function,
-                double[::1] integrator_ic,
-                double dt=1., double duration=100, int integrate=0):
-        """ Python interface for SSA. """
-        cdef np.ndarray times = np.arange(0, duration, dt)
-        cdef np.ndarray states
-        states = self.c_ssa(ic, input_function, integrator_ic, dt, duration, integrate)
-        return times, states
+        # hybrid-ssa algorithm parameters
+        self.epsilon = 0.03 # weights for candidate leap (~0.03)
+        self.nc_threshold = 5 # threshold for critical rxns (~5 firings)
+        self.separation = 10 # threshold events per step (~10 firings)
+        self.holding_period = 100 # pure-ssa step interval (~100 steps)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef np.ndarray c_ssa(self, long[::1] ic, cSignal input_function,
+    cpdef solve(self, long[::1] ic, cSignal input_function,
                 double[::1] integrator_ic,
-                double dt=1., double duration=100, int integrate=0):
+                double dt=1., double duration=100, bint use_pure_ssa=0):
         """
-        Run gillespie ssa solver.
+        Run hybrid-ssa solver.
 
         Args:
         ic (np.ndarray[long]) - initial condition
@@ -108,6 +84,7 @@ cdef class cSolver:
         integrator_ic (np.ndarray[double]) - initial condition for integrator
         dt (double) - timestep used for interpolation
         duration (double) - simulation duration
+        use_pure_ssa (bint) - if True, use pure SSA algorithm
 
         Returns:
         times_regular (np.ndarray[float]) - interpolated time vector
@@ -117,6 +94,7 @@ cdef class cSolver:
         # initialize times and state lists, simulation counters
         cdef double t = 0.
         cdef array states = array('l', ic)
+        cdef array new_states = array('l', ic)
         cdef array cumulative = array('d', integrator_ic)
 
         # for input checking loop
@@ -124,13 +102,19 @@ cdef class cSolver:
         cdef bint input_changed
 
         # simulation history
-        #cdef array times_regular = array('d', np.arange(0, duration, dt))
+        cdef array times_regular = array('d', np.arange(0, duration, dt))
         cdef long num_timepoints = <long>ceil(duration/dt)
         cdef array states_regular = array('l', np.empty((self.network.N, num_timepoints), dtype=np.int64).flatten())
         cdef double threshold = 0.
         cdef int t_index = 0
         cdef int s_index
-        cdef np.ndarray trajectories
+        cdef np.ndarray times, trajectories
+
+        # gilespie
+        cdef int pure_ssa_count = 0
+        if use_pure_ssa == 1:
+            pure_ssa_count = 1
+        cdef bint shrink_step_size = 0
 
         # initialize input
         cdef bint null_input = 0
@@ -140,20 +124,12 @@ cdef class cSolver:
         # declare items used throughout simulation
         cdef array input_value, new_input_value
         cdef array rxn_rates
-        cdef array rxn_order
-        cdef double total_rate
-        cdef int rxn_fired = 0
-        cdef double tau
+        cdef double total_rxn_rate, total_critical_rxn_rate
+        cdef int rxn_fired
+        cdef array critical_rxns, non_critical_rxns
+        cdef double candidate_leap, alternate_leap, tau
 
-        # initialize all rates and sort order
-        input_value = input_function.get_signal(0)
-        self.network.update_all(states, input_value, cumulative)
-        rxn_rates = self.network.get_rxn_rates()
-        rxn_order = array('l', np.argsort(rxn_rates)[::-1])
-
-        # ================================================================
-        # BEGIN SIMULATION
-        # ================================================================
+        ###### begin dynamic simulation ######
         while t < duration:
 
             # update stored state values
@@ -162,30 +138,22 @@ cdef class cSolver:
                     states_regular.data.as_longs[s_index*num_timepoints+t_index] = states.data.as_longs[s_index]
                 threshold += dt
                 t_index += 1
-                rxn_order = array('l', np.argsort(rxn_rates)[::-1])
 
             # compute input value
-            new_input_value = self.get_input_value(input_function, t)
+            input_value = input_function.get_signal(t)
 
-            # check if input changed and input rates accordingly
-            for index in xrange(self.network.I):
-                if new_input_value.data.as_doubles[index] != input_value.data.as_doubles[index]:
-                    input_value.data.as_doubles[index] = new_input_value.data.as_doubles[index]
-                    self.network.update_input(states, input_value, cumulative, index)
+            # get current states and reaction rates
+            rxn_rates = self.network.rate_function.get_rxn_rates(states, input_value, cumulative)
 
-            # update reaction rates
-            self.network.update(states, input_value, cumulative, rxn_fired)
+            # compute total reaction rate
+            total_rxn_rate = cython_sum.sum_double_arr(rxn_rates, self.network.M)
 
-            # get rates
-            rxn_rates = self.network.get_rxn_rates()
-            total_rate = self.network.get_total_rate()
+            if total_rxn_rate == 0:
 
-            # if total rate is zero, keep stepping until input changes
-            if total_rate == 0:
-
-                # if there is no input, jump to end
+                # if there is no input and all rates are zero, jump to end
                 if null_input == 1:
                     break
+
                 else:
                     # skip to next change in input
                     input_changed = 0
@@ -205,20 +173,81 @@ cdef class cSolver:
                             t += dt
                     continue
 
-            # choose and fire a reaction
-            tau = get_timestep(total_rate)
-            #rxn_fired = self._choose_rxn(rxn_rates, total_rate)
-            rxn_fired = self.choose_rxn(rxn_order, rxn_rates, total_rate)
-            self.fire_reaction(rxn_fired, 1, states)
+            # if pure_ssa_count is active take a single SSA step
+            if pure_ssa_count > 0:
+                tau = get_timestep(total_rxn_rate)
+                rxn_fired = choose_rxn(rxn_rates, self.network.M)
+                self.fire_reaction(rxn_fired, 1, new_states)
 
-            # update times and states (TODO: only update those that changed)
+                # if using pure SSA, keep counter at 1
+                if use_pure_ssa == 0:
+                    pure_ssa_count -= 1
+
+            else:
+
+                if shrink_step_size == 0:
+
+                    # determine which reactions are critical
+                    critical_rxns = self.get_critical_rxns(states)
+                    non_critical_rxns = get_logical_not(critical_rxns, self.network.M)
+
+                    # if all reactions are critical, leap to end (rejected...)
+                    if cython_sum.sum_long_arr(non_critical_rxns, self.network.M) == 0:
+                        candidate_leap = duration - t
+
+                    # propose candidate leap based on max tolerable change
+                    else:
+                        candidate_leap = self.get_candidate_leap(states, rxn_rates, non_critical_rxns, duration-t)
+
+                # if candidate leap is too short, execute 100 pure ssa steps
+                if candidate_leap < (self.separation / total_rxn_rate):
+                    pure_ssa_count = self.holding_period
+                    continue
+
+                else:
+
+                    # compute tau for critical reactions
+                    total_critical_rxn_rate = sum_array_subset(rxn_rates, critical_rxns, self.network.M)
+
+                    # if total critical rate is zero, jump to end
+                    if total_critical_rxn_rate == 0:
+                        alternate_leap = duration - t
+
+                    # otherwise, compute time until next critical firing
+                    else:
+                        alternate_leap = get_timestep(total_critical_rxn_rate)
+
+                    if candidate_leap <= alternate_leap or total_critical_rxn_rate == 0.:
+                        tau = candidate_leap
+                    else:
+                        # fire critical reaction
+                        tau = alternate_leap
+                        rxn_fired = self.choose_critical_rxn(rxn_rates, critical_rxns)
+                        self.fire_reaction(rxn_fired, 1, new_states)
+
+                    # use tau leap to fire non critical reactions
+                    self.fire_noncritical_rxns(rxn_rates, non_critical_rxns, tau, new_states)
+
+            # check if step was too large
+            if cython_sum.min_long_arr(new_states, self.network.N) < 0:
+                candidate_leap = tau / 2
+                shrink_step_size = 1
+
+                # unfire reactions
+                for i in xrange(self.network.N):
+                    new_states.data.as_longs[i] = states.data.as_longs[i]
+
+                continue
+            else:
+                shrink_step_size = 0
+
+            # update times and states
             t += tau
-            if integrate == 1:
-                self.update_cumulative(states, cumulative, tau)
+            for index in xrange(self.network.N):
+                states.data.as_longs[index] = new_states.data.as_longs[index]
+                cumulative.data.as_doubles[index] += (dt * new_states.data.as_longs[index])
 
-        # ================================================================
-        # END SIMULATION
-        # ================================================================
+        ###### end dynamic simulation ######
 
         # interpolate any skipped values
         while threshold < duration:
@@ -228,32 +257,9 @@ cdef class cSolver:
             t_index += 1
 
         #return numpy arrays
+        times = np.frombuffer(times_regular, dtype=np.float64)
         trajectories = np.frombuffer(states_regular, dtype=np.int64).reshape(self.network.N, num_timepoints)
-        #times = np.frombuffer(times_regular, dtype=np.float64)
-
-        return trajectories
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef double get_total_rate(self, array rxn_rates):
-        return cython_sum.sum_double_arr(rxn_rates, self.network.M)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef int _choose_rxn(self, array rxn_rates, double total_rate):
-        """ Probabalistically select a single reaction given rates. """
-        return choose_rxn(rxn_rates, self.network.M, total_rate)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef int choose_rxn(self, array order, array rxn_rates, double total_rate):
-        """ Select reaction from given pre-sorted rates (faster). """
-        return choose_rxn_sorted(order, rxn_rates, self.network.M, total_rate)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef array get_input_value(self, cSignal input_function, double t):
-        return input_function.get_signal(t)
+        return times, trajectories
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -262,16 +268,14 @@ cdef class cSolver:
         cdef array critical_rates = copyarray(rates)
         cdef int i
         cdef int rxn
-        cdef double total_rate
 
         # if reaction is not critical, zero its rate
         for i in xrange(self.network.M):
             if critical.data.as_longs[i] == 0:
                 critical_rates.data.as_doubles[i] = 0.
 
-        total_rate = cython_sum.sum_double_arr(critical_rates, self.network.M)
-        if total_rate > 0.:
-            rxn = choose_rxn(critical_rates, self.network.M, total_rate)
+        if cython_sum.sum_double_arr(critical_rates, self.network.M) > 0.:
+            rxn = choose_rxn(critical_rates, self.network.M)
 
         return rxn
 
@@ -280,15 +284,12 @@ cdef class cSolver:
     cdef fire_reaction(self, int rxn, int extent, array states):
         cdef int i
         cdef int coefficient
-        for i, coefficient in self.network.stoich[rxn].items():
-            states.data.as_longs[i] += (coefficient * extent)
 
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef update_cumulative(self, array states, array cumulative, double tau):
-        cdef int i
+        # TODO: specify dependent states (nonzero stoich)
         for i in xrange(self.network.N):
-            cumulative.data.as_doubles[i] += (tau * states.data.as_longs[i])
+            coefficient = self.network.stoichiometry.data.as_longs[i*self.network.M+rxn]
+            if coefficient != 0:
+                states.data.as_longs[i] += (coefficient * extent)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -389,45 +390,27 @@ cdef class cSolver:
         return candidate_leap
 
 
-cdef inline double get_timestep(double total_rate):
+cdef inline double get_timestep(double total_rxn_rate):
     """ Sample time until next reaction from exponential distribution. """
     cdef double random_float = rand()/(RAND_MAX*1.0)
-    return (1/total_rate) * log(1/random_float)
+    return (1/total_rxn_rate) * log(1/random_float)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef int choose_rxn(array rates, int num_rxns, double total_rate) nogil:
+cdef int choose_rxn(array rates, int num_rxns) nogil:
     """ Probabilistically selects reaction based on rate. """
     cdef double rate, r
-    cdef int index
-    #cdef double total_rate = cython_sum.sum_double_arr(rates, num_rxns)
+    cdef int index = 0
+    cdef double total_rate = cython_sum.sum_double_arr(rates, num_rxns)
 
     r = rand()/(RAND_MAX*1.0)
     for index in xrange(num_rxns):
         rate = rates.data.as_doubles[index]
         if r < 0:
-            index -= 1
             break
         r -= rate / total_rate
-    return index
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef int choose_rxn_sorted(array order, array rates, int num_rxns, double total_rate) nogil:
-    """ Probabilistically selects reaction based on rate. """
-    cdef double rate = 0
-    cdef double r
-    cdef int index
-
-    # NOTE: if random number is high and last reaction puts rate over total, the r<=0 comparison is never activated and the index isn't incremented by the subsequent loop. solution is to correct index following the comparison
-    r = rand()/(RAND_MAX*1.0)
-    for index in xrange(num_rxns):
-        rate = rates.data.as_doubles[order.data.as_longs[index]]
-        if r <= 0:
-            index -= 1
-            break
-        r -= rate / total_rate
-    return order.data.as_longs[index]
+        index += 1 # bug - remove on next compilation. doesnt affect anything
+    return index - 1
 
 cdef double float_sum(np.ndarray[np.float_t, ndim=1] vals):
     """ Return sum of an array of type double. """
@@ -470,40 +453,28 @@ cdef double sum_array_subset(array arr, array mask, int arr_size) nogil:
 class Solver:
     """ Python rapper for hybrid-ssa solver. """
 
-    def __init__(self, network):
+    def __init__(self, network, ):
 
         # sort rxns and compile stoichiometry
         network.sort_rxns()
-        network.resize_inputs()
         network.compile_stoichiometry()
 
         # typecast network features
-        N = network.nodes.size
-        M = len(network.reactions)
+        N, M = network.stoichiometry.shape
         I = network.input_size
-        self.N = N
-        self.M = M
-        self.I = I
         stoichiometry = array('l', network.stoichiometry.astype(np.int64).tobytes())
+        self.N = N
 
         # get cythonized rate function and network
-        stoich_dict = self.get_stoichiometry_dict(network)
-        rate_function = RateFunction(network).cRateFunction
+        rate_function = RateFunction(network.reactions).cRateFunction
         reactant_species = np.where(network.stoichiometry.min(axis=1) <= 0)[0]
         num_reactant_species = reactant_species.size
         min_coeff_per_rxn = network.stoichiometry.min(axis=0)
-        c_network = cNetwork(N, M, I, stoichiometry, min_coeff_per_rxn, reactant_species, num_reactant_species, rate_function, stoich_dict)
+        c_network = cNetwork(N, M, I, stoichiometry, min_coeff_per_rxn, reactant_species, num_reactant_species, rate_function)
 
         self.c_solver = cSolver(c_network)
 
-    @staticmethod
-    def get_stoichiometry_dict(network):
-        adict = {}
-        for i, rxn in enumerate(network.reactions):
-            adict[i] = {s: rxn.stoichiometry[s] for s in rxn.stoichiometry.nonzero()[0]}
-        return adict
-
-    def solve(self, ic, input_function=None, integrator_ic=None, dt=1., duration=100., use_pure_ssa=False, integrate=False):
+    def solve(self, ic, input_function, integrator_ic=None, dt=1., duration=100., use_pure_ssa=False):
         """
         Run hybrid-ssa simulation algorithm.
 
@@ -522,9 +493,9 @@ class Solver:
 
         # set input function
         if input_function is None:
-            input_function = cSignal([0 for _ in range(self.I)])
+            input_function = lambda t: np.zeros(self.N, dtype=np.float64)
         else:
-            input_function = deepcopy(input_function)
+            input_function = input_function
 
         # check initial condition type
         ic = ic.astype(np.int64)
@@ -536,9 +507,6 @@ class Solver:
             integrator_ic = integrator_ic.astype(np.float64)
 
         # run solver
-        if use_pure_ssa:
-            solout = self.c_solver.ssa(ic, input_function, integrator_ic, dt=dt, duration=duration, integrate=int(integrate))
-        else:
-            raise ValueError('Hybrid-SSA/Tau leap not yet implemented.')
+        solout = self.c_solver.solve(ic, input_function, integrator_ic, dt=dt, duration=duration, use_pure_ssa=int(use_pure_ssa))
 
         return solout
