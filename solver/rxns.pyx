@@ -17,14 +17,16 @@ from array import array
 from functools import reduce
 from operator import add
 
-"""
-IDEAS: can pre-specify indices not participating in reactions to drastically cut down iterations...
-"""
 
 cdef class cActive:
     def __init__(self, int N, long[:] active):
         self.N = N
         self.active = active
+
+    # @cython.boundscheck(False)
+    # @cython.wraparound(False)
+    cdef double get_rate(self, array states, array input_value, array cumulative):
+        return 0.
 
 
 cdef class cActiveInputs(cActive):
@@ -39,26 +41,6 @@ cdef class cSumRxn(cActive):
         cActive.__init__(self, N, active)
         self.k = k
         self.propensity = propensity
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef double get_rate_doubles(self, array values):
-        """ Get reaction rate. """
-
-        cdef double rate = 0
-        cdef int j
-        cdef int s_ind
-
-        # get species dependencies
-        for j in xrange(self.N):
-            s_ind = self.active[j]
-            rate += self.propensity[s_ind]*values.data.as_doubles[s_ind]
-
-        if rate < 0:
-            rate = 0.
-
-        rate *= self.k
-        return rate
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -80,6 +62,40 @@ cdef class cSumRxn(cActive):
         rate *= self.k
         return rate
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double get_rate_doubles(self, array values):
+        """ Get reaction rate. """
+
+        cdef double rate = 0
+        cdef int j
+        cdef int s_ind
+
+        # get species dependencies
+        for j in xrange(self.N):
+            s_ind = self.active[j]
+            rate += self.propensity[s_ind]*values.data.as_doubles[s_ind]
+
+        if rate < 0:
+            rate = 0.
+
+        rate *= self.k
+        return rate
+
+
+cdef class cProportionalController(cSumRxn):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double get_rate(self, array states, array input_value, array cumulative):
+        return self.get_rate_longs(states)
+
+
+cdef class cIntegralController(cSumRxn):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double get_rate(self, array states, array input_value, array cumulative):
+        return self.get_rate_doubles(cumulative)
+
 
 cdef class cMassAction(cActiveInputs):
 
@@ -91,7 +107,12 @@ cdef class cMassAction(cActiveInputs):
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef double get_rate(self, array states, array input_value) nogil:
+    cdef double get_rate(self, array states, array input_value, array cumulative):
+        return self.c_get_rate(states, input_value)
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double c_get_rate(self, array states, array input_value) nogil:
         """ Get mass action reaction rate. """
         cdef double rate
         cdef int i, j
@@ -159,8 +180,7 @@ cdef class cHill(cActiveInputs):
     def __init__(self, int N, long[:] active, int M, long[:] active_inputs,
                  int R,
                  double k, double k_m, double n, double baseline,
-                 double[:] propensity,
-                 double[:] input_dependence,
+                 double[:] propensity, double[:] input_dependence,
                  cRepressor[:] c_reps,
                  double[:] rate_modifier):
         cActiveInputs.__init__(self, N, active, M, active_inputs)
@@ -176,7 +196,12 @@ cdef class cHill(cActiveInputs):
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef double get_rate(self, array states, array input_value):
+    cdef double get_rate(self, array states, array input_value, array cumulative):
+        return self.c_get_rate(states, input_value)
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double c_get_rate(self, array states, array input_value):
         """ Get rate for Hill reaction. """
 
         cdef double rate = self.k
@@ -222,7 +247,12 @@ cdef class cCoupling(cActive):
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef double get_rate(self, array states, array input_value):
+    cdef double get_rate(self, array states, array input_value, array cumulative):
+        return self.c_get_rate(states, input_value)
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double c_get_rate(self, array states, array input_value):
         """ Get reaction rate for coupling mechanism. """
 
         cdef double rate = 0
@@ -263,14 +293,14 @@ cdef class cRateFunction:
 
     def __init__(self,
                  cActive[:] rxns,
-                 long[:] rxn_type_identifiers,
+                 long[:] rxn_types,
                  dict rxn_map,
                  dict input_map):
 
         # store reactions
         self.rxns = rxns
+        self.rxn_types = rxn_types #array('l', rxn_type_identifiers)
         self.M = len(self.rxns)
-        self.rxn_types = array('l', rxn_type_identifiers)
         self.rxn_map = rxn_map
         self.input_map = input_map
 
@@ -284,27 +314,27 @@ cdef class cRateFunction:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef update_input(self, array states, array input_value, array cumulative, int input_dim):
+    cdef void update_input(self, array states, array input_value, array cumulative, int input_dim):
         """ Update rates for reactions that have changed. """
         #cdef int i
         cdef rxn_ind
-
-        for rxn_ind in self.input_map[input_dim]:
+        cdef list indices = self.input_map[input_dim]
+        for rxn_ind in indices:
             self.set_rate(states, input_value, cumulative, rxn_ind)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef update(self, array states, array input_value, array cumulative, int fired):
+    cdef void update(self, array states, array input_value, array cumulative, int fired):
         """ Update rates for reactions that have changed. """
         #cdef int i
         cdef rxn_ind
-
-        for rxn_ind in self.rxn_map[fired]:
+        cdef list indices = self.rxn_map[fired]
+        for rxn_ind in indices:
             self.set_rate(states, input_value, cumulative, rxn_ind)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef update_all(self, array states, array input_value, array cumulative):
+    cdef void update_all(self, array states, array input_value, array cumulative):
         """ Update all reaction rates. """
         cdef int rxn
         for rxn in xrange(self.M):
@@ -312,8 +342,9 @@ cdef class cRateFunction:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef set_rate(self, array states, array input_value, array cumulative, int rxn):
-        cdef double old_rate, rate
+    cdef double evaluate(self, array states, array input_value, array cumulative, int rxn):
+        """ Evaluate rate of individual reaction. """
+
         cdef int rxn_type
         cdef cMassAction mass_rxn
         cdef cHill hill_rxn
@@ -321,38 +352,48 @@ cdef class cRateFunction:
         cdef cCoupling coupling_rxn
 
         # get reaction type
-        rxn_type = self.rxn_types.data.as_longs[rxn]
+        rxn_type = self.rxn_types[rxn]
 
+        # get reaction rate
         if rxn_type == 0:
-
-            mass_rxn = self.rxns[rxn]
-            rate = mass_rxn.get_rate(states, input_value)
+            coupling_rxn = self.rxns[rxn]
+            rate = coupling_rxn.c_get_rate(states, input_value)
 
         elif rxn_type == 1:
-
-            hill_rxn = self.rxns[rxn]
-            rate = hill_rxn.get_rate(states, input_value)
+            mass_rxn = self.rxns[rxn]
+            rate = mass_rxn.c_get_rate(states, input_value)
 
         elif rxn_type == 2:
+            hill_rxn = self.rxns[rxn]
+            rate = hill_rxn.c_get_rate(states, input_value)
 
+        elif rxn_type == 3:
             sum_rxn = self.rxns[rxn]
             rate = sum_rxn.get_rate_doubles(cumulative)
 
-        elif rxn_type == 3:
-
+        elif rxn_type == 4:
             sum_rxn = self.rxns[rxn]
             rate = sum_rxn.get_rate_longs(states)
-
-        elif rxn_type == 4:
-
-            coupling_rxn = self.rxns[rxn]
-            rate = coupling_rxn.get_rate(states, input_value)
 
         else:
             raise ValueError('Reaction type not recognized.')
 
-        # update rate and total
+        #rxn.get_rate(states, input_value, cumulative)
+
+        return rate
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef void set_rate(self, array states, array input_value, array cumulative, int rxn):
+        """ Set rate for individual reaction. """
+
+        cdef double old_rate, rate
+
+        # update rxn rate
+        rate = self.evaluate(states, input_value, cumulative, rxn)
         old_rate = self.rates.data.as_doubles[rxn]
+
+        # update total rate
         self.rates.data.as_doubles[rxn] = rate
         self.total_rate += (rate - old_rate)
 
@@ -454,6 +495,37 @@ class SumReaction:
     def get_rate(self, states):
         return self.c_rxn.get_rate(states)
 
+
+class ProportionalController(SumReaction):
+    def __init__(self, py_rxn):
+        """ Args: py_rxn (ProportionalController instance) """
+        cdef cProportionalController c_rxn
+        N = int(py_rxn.active_species.size)
+        active = py_rxn.active_species.astype(np.int64)
+        k = py_rxn.rate_constant.astype(np.float64)
+        propensity = py_rxn.propensity.astype(np.int64)
+        c_rxn = cProportionalController(N, active, k, propensity)
+        self.c_rxn = c_rxn
+
+    def get_rate(self, states):
+        return self.c_rxn.get_rate(states)
+
+
+class IntegralController(SumReaction):
+    def __init__(self, py_rxn):
+        """ Args: py_rxn (IntegralController instance) """
+        cdef cIntegralController c_rxn
+        N = int(py_rxn.active_species.size)
+        active = py_rxn.active_species.astype(np.int64)
+        k = py_rxn.rate_constant.astype(np.float64)
+        propensity = py_rxn.propensity.astype(np.int64)
+        c_rxn = cIntegralController(N, active, k, propensity)
+        self.c_rxn = c_rxn
+
+    def get_rate(self, states):
+        return self.c_rxn.get_rate(states)
+
+
 class Coupling:
     """ Typecasting for cCoupling instances. """
     def __init__(self, rxn):
@@ -494,21 +566,21 @@ class RateFunction:
         rxns, rxn_types = [], []
 
         for rxn in cell.reactions:
-            if rxn.__class__ == pyMassAction:
+            if rxn.__class__ == pyCoupling:
                 rxn_types.append(0)
+                rxns.append(Coupling(rxn).c_rxn)
+            elif rxn.__class__ == pyMassAction:
+                rxn_types.append(1)
                 rxns.append(MassActionReaction(rxn).c_rxn)
             elif rxn.__class__ == pyHill:
-                rxn_types.append(1)
+                rxn_types.append(2)
                 rxns.append(HillReaction(rxn).c_rxn)
             elif rxn.__class__ == pyIControl:
-                rxn_types.append(2)
-                rxns.append(SumReaction(rxn).c_rxn)
-            elif rxn.__class__ == pyPControl:
                 rxn_types.append(3)
-                rxns.append(SumReaction(rxn).c_rxn)
-            elif rxn.__class__ == pyCoupling:
+                rxns.append(IntegralController(rxn).c_rxn)
+            elif rxn.__class__ == pyPControl:
                 rxn_types.append(4)
-                rxns.append(Coupling(rxn).c_rxn)
+                rxns.append(ProportionalController(rxn).c_rxn)
             else:
                 raise ValueError('{} reaction type not recognized.'.format(rxn.__class__.__name__))
 
@@ -522,6 +594,7 @@ class RateFunction:
 
         # instantiate cReactions object
         self.cRateFunction = cRateFunction(rxns, rxn_types, rxn_map, input_map)
+
 
     @staticmethod
     def get_propensity_dict(network):

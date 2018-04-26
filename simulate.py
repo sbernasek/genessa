@@ -189,16 +189,16 @@ class MonteCarloSimulation(Simulation):
         self.network.print_reactions()
 
     def set_initial_conditions(self, ic=None, integrator_ic=None):
-        self.get_ic = self.get_ic_generator(ic)
-        self.get_integrator_ic = self.get_ic_generator(integrator_ic)
+        N = self.network.nodes.size
+        self.get_ic = self.get_ic_generator(ic, N)
+        self.get_integrator_ic = self.get_ic_generator(integrator_ic, N)
 
     @staticmethod
-    def get_ic_generator(ic):
+    def get_ic_generator(ic, N):
         """ Create initial condition generating function. """
         if type(ic) == tuple:
             m, v = ic
-            dim = system.nodes.size
-            f = lambda n: np.random.normal(m, np.sqrt(v), size=(n, dim)).astype(int)
+            f = lambda n: np.random.normal(m, np.sqrt(v), size=(n, N)).astype(int)
         elif type(ic) == types.FunctionType:
             f = lambda n: [ic() for _ in range(n)]
         else:
