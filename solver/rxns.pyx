@@ -1,5 +1,20 @@
 # cython: profile=True
 
+
+"""
+TO DO:
+
+1. Can pre-allocate array of rxn types, with array of "start positions" in propensity arrays for each rxn time (to avoid massive sparseness)
+
+2. Can pre-allocate array of propensity coefficients for each rxn type
+
+3. For each update, pull rxn type, get index for corresponding propensity array, then compute propensity.
+
+4. One "get_rate" function serves for all reactions of a given type
+
+"""
+
+
 from rxndiffusion.reactions import Reaction as pyMassAction
 from rxndiffusion.reactions import EnzymaticReaction as pyHill
 from rxndiffusion.reactions import IntegralController as pyIControl
@@ -410,7 +425,7 @@ class MassActionReaction:
         active = py_rxn.active_species.astype(np.int64)
         M = int(py_rxn.active_inputs.size)
         active_inputs = py_rxn.active_inputs.astype(np.int64)
-        k = py_rxn.rate_constant.astype(np.float64)
+        k = py_rxn.k.astype(np.float64)
         propensity = py_rxn.propensity.astype(np.int64)
         input_dependence = py_rxn.input_dependence.astype(np.int64)
         c_rxn = cMassAction(N, active, M, active_inputs, k, propensity, input_dependence)
@@ -430,7 +445,7 @@ class HillReaction:
         active = enz_rxn.active_substrates.astype(np.int64)
         M = int(enz_rxn.active_inputs.size)
         active_inputs = enz_rxn.active_inputs.astype(np.int64)
-        k = enz_rxn.rate_constant.astype(np.float64)
+        k = enz_rxn.k.astype(np.float64)
         k_m = np.float64(enz_rxn.k_m)
         n = np.float64(enz_rxn.n)
         baseline = np.float64(enz_rxn.baseline)
@@ -487,7 +502,7 @@ class SumReaction:
         cdef cSumRxn c_rxn
         N = int(py_rxn.active_species.size)
         active = py_rxn.active_species.astype(np.int64)
-        k = py_rxn.rate_constant.astype(np.float64)
+        k = py_rxn.k.astype(np.float64)
         propensity = py_rxn.propensity.astype(np.int64)
         c_rxn = cSumRxn(N, active, k, propensity)
         self.c_rxn = c_rxn
@@ -502,7 +517,7 @@ class ProportionalController(SumReaction):
         cdef cProportionalController c_rxn
         N = int(py_rxn.active_species.size)
         active = py_rxn.active_species.astype(np.int64)
-        k = py_rxn.rate_constant.astype(np.float64)
+        k = py_rxn.k.astype(np.float64)
         propensity = py_rxn.propensity.astype(np.int64)
         c_rxn = cProportionalController(N, active, k, propensity)
         self.c_rxn = c_rxn
@@ -517,7 +532,7 @@ class IntegralController(SumReaction):
         cdef cIntegralController c_rxn
         N = int(py_rxn.active_species.size)
         active = py_rxn.active_species.astype(np.int64)
-        k = py_rxn.rate_constant.astype(np.float64)
+        k = py_rxn.k.astype(np.float64)
         propensity = py_rxn.propensity.astype(np.int64)
         c_rxn = cIntegralController(N, active, k, propensity)
         self.c_rxn = c_rxn
@@ -536,7 +551,7 @@ class Coupling:
         N = int(rxn.active_species.size)
         active = rxn.active_species.astype(np.int64)
         propensity = rxn.propensity.astype(int)
-        k = rxn.rate_constant[0].astype(np.float64)
+        k = rxn.k[0].astype(np.float64)
         a = np.float64(rxn.a)
         w = np.float64(rxn.w)
 

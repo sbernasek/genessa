@@ -1,4 +1,4 @@
-# cython: profile=False
+# cython: profile=True
 
 """
 TAKEN FROM:

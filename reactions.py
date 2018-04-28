@@ -7,9 +7,27 @@ from operator import mul, add
 import copy
 
 
+def name_parameter(parameter, default_name='k'):
+    """ Get parameter name. """
+
+    # set reaction parameters
+    if type(parameter) in (tuple, list):
+        value, name = parameter
+
+    elif type(parameter) == dict:
+        value = list(parameter.keys())[0]
+        name = list(parameter.values())[0]
+
+    # if only parameter value is provided, use default name
+    elif type(parameter) in (int, float, np.float64, np.int64):
+        value, name = parameter, default_name
+
+    return value, name
+
+
 class Reaction:
 
-    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None, k=1, rxn_type=None, temperature_sensitive=True, atp_sensitive=False, ribosome_sensitive=False):
+    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None, k=1, rxn_type=None, temperature_sensitive=True, atp_sensitive=False, ribosome_sensitive=False, parameters=None):
         """
         Class describes a single kinetic pathway.
 
@@ -48,7 +66,15 @@ class Reaction:
             self.input_dependence = np.zeros(1, dtype=np.int64)
 
         # set reaction parameters
-        self.rate_constant = np.array([k], dtype=float)
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+        k_value, k_name = name_parameter(k, 'k')
+        if 'k' not in self.parameters.keys():
+            self.parameters['k'] = k_name
+        self.k = np.array([k_value], dtype=float)
+
+        # define active species and inputs
         self.active_species = np.where(self.propensity != 0)[0]
         self.active_inputs = np.where(self.input_dependence != 0)[0]
         self.num_active_species = self.active_species.size
@@ -69,10 +95,15 @@ class Reaction:
 
     def shift(self, shift):
 
-        stoichiometry = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
-        propensity = np.hstack((np.zeros(shift, dtype=int), self.propensity))
-        rxn = Reaction(stoichiometry, propensity, self.input_dependence, self.rate_constant[0], self.rxn_type)
-        return rxn
+        s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
+        p = np.hstack((np.zeros(shift, dtype=int), self.propensity))
+        i = self.input_dependence
+
+        kw = dict(k=self.k[0],
+                  rxn_type=self.rxn_type,
+                  parameters=self.parameters)
+
+        return Reaction(s, p, i, **kw)
 
     @staticmethod
     def _get_activities(states, propensities):
@@ -101,9 +132,9 @@ class Reaction:
 
         # incorporate input dependence
         if self.num_active_species == 0:
-            rate = self.rate_constant * functools.reduce(mul, input_state**self.input_dependence)
+            rate = self.k * functools.reduce(mul, input_state**self.input_dependence)
         else:
-            rate = self.rate_constant * functools.reduce(mul, activities) * functools.reduce(mul, input_state**self.input_dependence)
+            rate = self.k * functools.reduce(mul, activities) * functools.reduce(mul, input_state**self.input_dependence)
 
         return rate
 
@@ -119,12 +150,12 @@ class Reaction:
 
         i = [propensity]
         if np.max(propensity) < 2:
-            a = [self.rate_constant]
+            a = [self.k]
         elif np.max(propensity) == 2 and len(np.where(propensity == 2)) == 1:
             a = copy.copy(propensity)
             a[np.argmax(a)] -= 1
             i.append(a)
-            a = [self.rate_constant/2, -self.rate_constant/2]
+            a = [self.k/2, -self.k/2]
         else:
             print('Propensity function is too complex.')
         return i, a
@@ -140,7 +171,7 @@ class Reaction:
             stoichiometry=np.array(js['stoichiometry']),
             propensity=np.array(js['propensity']),
             input_dependence=js['input_dependence'],
-            k=np.array([js['rate_constant']], dtype=float),
+            k=np.array([js['k']], dtype=float),
             rxn_type=js['rxn_type'],
             temperature_sensitive=js['temperature_sensitive'],
             atp_sensitive=js['atp_sensitive'],
@@ -153,7 +184,7 @@ class Reaction:
             # return each attribute
             'stoichiometry': self.stoichiometry.tolist(),
             'input_dependence': self.input_dependence.tolist(),
-            'rate_constant': self.rate_constant[0],
+            'k': self.k[0],
             'propensity': self.propensity.tolist(),
             'active_species': self.active_species.tolist(),
             'zero_order': self.zero_order,
@@ -175,7 +206,7 @@ class LinearReaction(Reaction):
             raise ValueError('Reaction is not linear.')
 
     def get_rate(self, states, input_state, **kwargs):
-        return self.rate_constant * states[self.active_species]
+        return self.k * states[self.active_species]
 
 
 class LinearInput(Reaction):
@@ -186,7 +217,7 @@ class LinearInput(Reaction):
             raise ValueError('Reaction is not a linear input.')
 
     def get_rate(self, states, input_state, **kwargs):
-        return self.rate_constant * input_state
+        return self.k * input_state
 
 
 class SecondOrderReaction(Reaction):
@@ -204,9 +235,9 @@ class SecondOrderReaction(Reaction):
     def get_rate(self, states, input_state, **kwargs):
         """ Compute and return current rate of a second order pathway. """
         if self.num_active_species > 0:
-            rate = self.rate_constant * functools.reduce(mul, states[self.active_species])
+            rate = self.k * functools.reduce(mul, states[self.active_species])
         else:
-            rate = self.rate_constant
+            rate = self.k
         if self.active_inputs.size > 0:
             rate *= input_state
 
@@ -215,7 +246,7 @@ class SecondOrderReaction(Reaction):
 
 class EnzymaticReaction:
 
-    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None, rate_constant=1, k_m=1, hill=1, baseline=0, repressors=None, rxn_type='hill', rate_modifier=None, temperature_sensitive=False, atp_sensitive=False, ribosome_sensitive=False):
+    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None, k=1, k_m=1, n=1, baseline=0, repressors=None, rxn_type='hill', rate_modifier=None, temperature_sensitive=False, atp_sensitive=False, ribosome_sensitive=False, parameters=None):
         """
         Class describes a single hill-kinetic pathway.
 
@@ -223,9 +254,9 @@ class EnzymaticReaction:
             stoichiometry (array like) - list of stoichiometric coefficients for all species
             propensity (array like) - weights for activating substrates
             input_dependence (float or array) - order of rate dependence upon input
-            rate_constant (float) - maximum reaction rate
+            k (float) - maximum reaction rate
             k_m (float) - michaelis constant
-            hill (float) - hill coefficient
+            n (float) - hill coefficient
             baseline (float) - baseline reaction rate in absense of any substrate
             repressors (list) - list of repressor objects affecting reaction pathway
             rxn_type (str) - name of reaction
@@ -236,6 +267,7 @@ class EnzymaticReaction:
         """
 
         self.rxn_type = rxn_type
+        self.zero_order = False
 
         # define stoichiometry
         if stoichiometry is None:
@@ -255,12 +287,29 @@ class EnzymaticReaction:
         else:
             self.input_dependence = np.zeros(1, dtype=np.int64)
 
-        # set constants
-        self.rate_constant = np.array([rate_constant], dtype=float)
-        self.k_m = k_m
-        self.n = hill
-        self.baseline = baseline
-        self.zero_order = False
+        # set parameters
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+        k_value, k_name = name_parameter(k, 'k')
+        if 'k' not in self.parameters.keys():
+            self.parameters['k'] = k_name
+        self.k = np.array([k_value], dtype=float)
+
+        km_value, km_name = name_parameter(k_m, 'k_m')
+        if 'k_m' not in self.parameters.keys():
+            self.parameters['k_m'] = km_name
+        self.k_m = km_value
+
+        n_value, n_name = name_parameter(n, 'n')
+        if 'n' not in self.parameters.keys():
+            self.parameters['n'] = n_name
+        self.n = n_value
+
+        baseline_value, baseline_name = name_parameter(baseline, 'v0')
+        if 'v0' not in self.parameters.keys():
+            self.parameters['v0'] = baseline_name
+        self.baseline = baseline_value
 
         # add repressors
         if repressors is None:
@@ -294,16 +343,17 @@ class EnzymaticReaction:
         # shift repressors
         repressors = [rep.shift(shift) for rep in self.repressors]
 
-        kw = dict(rate_constant=self.rate_constant[0],
+        kw = dict(k=self.k[0],
                   k_m=self.k_m,
-                  hill=self.n,
+                  n=self.n,
                   baseline=self.baseline,
                   repressors=repressors,
                   rxn_type=self.rxn_type,
                   rate_modifier=self.rate_modifier,
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
-                  ribosome_sensitive=self.ribosome_sensitive)
+                  ribosome_sensitive=self.ribosome_sensitive,
+                  parameters=self.parameters)
 
         return EnzymaticReaction(s, p, i, **kw)
 
@@ -350,7 +400,7 @@ class EnzymaticReaction:
             unoccupied_sites = functools.reduce(mul, [1-repressor.get_occupancy(states, input_state) for repressor in self.repressors])
 
         # get overall rate
-        k = self.rate_constant + (self.rate_modifier * input_state).sum()
+        k = self.k + (self.rate_modifier * input_state).sum()
         rate = unoccupied_sites * (k * (substrate_activity**self.n)/(substrate_activity**self.n + self.k_m**self.n) + self.baseline)
 
         return rate
@@ -365,7 +415,7 @@ class EnzymaticReaction:
             'stoichiometry': self.stoichiometry.tolist(),
             'propensity': self.propensity.tolist(),
             'input_dependence': self.input_dependence.tolist(),
-            'rate_constant': self.rate_constant[0],
+            'k': self.k[0],
             'k_m': self.k_m,
             'n': self.n,
             'baseline': self.baseline,
@@ -384,9 +434,9 @@ class EnzymaticReaction:
             stoichiometry=np.array(js['stoichiometry']),
             propensity=np.array(js['propensity']),
             input_dependence=js['input_dependence'],
-            rate_constant=np.array([js['rate_constant']], dtype=float),
+            k=np.array([js['k']], dtype=float),
             k_m=js['k_m'],
-            hill=js['n'],
+            n=js['n'],
             baseline=js['baseline'],
             repressors=[EnzymaticRepressor.from_json(repressor_js) for repressor_js in js['repressors']],
             rxn_type=js['rxn_type'],
@@ -398,7 +448,7 @@ class EnzymaticReaction:
 
 class EnzymaticRepressor:
 
-    def __init__(self, propensity=None, input_dependence=None, k_m=1, hill=1):
+    def __init__(self, propensity=None, input_dependence=None, k_m=1, n=1, parameters=None):
         """
         Class defines single instance of competitive enzyme occupancy.
 
@@ -406,7 +456,7 @@ class EnzymaticRepressor:
             propensity (array like) - weights for activating substrates
             input_dependence (float or np array) - order of rate dependence upon input
             k_m (float) - michaelis constant
-            hill (float) - hill coefficient
+            n (float) - hill coefficient
         """
 
         # define rate law parameters
@@ -422,8 +472,20 @@ class EnzymaticRepressor:
         else:
             self.input_dependence = np.zeros(1, dtype=np.int64)
 
-        self.k_m = k_m
-        self.n = hill
+        # set parameters
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+
+        km_value, km_name = name_parameter(k_m, 'k_m')
+        if 'k_m' not in self.parameters.keys():
+            self.parameters['k_m'] = km_name
+        self.k_m = km_value
+
+        n_value, n_name = name_parameter(n, 'n')
+        if 'n' not in self.parameters.keys():
+            self.parameters['n'] = n_name
+        self.n = n_value
 
         # determine active substrates
         self.active_substrates = np.where(self.propensity != 0)[0]
@@ -434,7 +496,9 @@ class EnzymaticRepressor:
         """ Expand dimensionality of reaction. """
         p = np.hstack((np.zeros(shift, dtype=np.float64), self.propensity))
         i = self.input_dependence
-        kw = dict(k_m=self.k_m, hill=self.n)
+        kw = dict(k_m=self.k_m,
+                  n=self.n,
+                  parameters=self.parameters)
         return EnzymaticRepressor(p, i, **kw)
 
     def get_occupancy(self, states, input_state):
@@ -477,12 +541,12 @@ class EnzymaticRepressor:
             propensity=np.array(js['propensity']),
             input_dependence=js['input_dependence'],
             k_m=js['k_m'],
-            hill=js['n'])
+            n=js['n'])
         return repressor
 
 class SumReaction:
 
-    def __init__(self, stoichiometry, propensity, k=1, rxn_type=None):
+    def __init__(self, stoichiometry, propensity, k=1, rxn_type=None, parameters=None):
 
         self.rxn_type = rxn_type
 
@@ -493,12 +557,18 @@ class SumReaction:
         self.propensity = np.array(propensity, dtype=np.int64)
         self.input_dependence = np.zeros(1, dtype=np.int64)
 
-        # set reaction parameters
-        self.rate_constant = np.array([k], dtype=float)
+        # set parameters
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+        k_value, k_name = name_parameter(k, 'k')
+        if 'k' not in self.parameters.keys():
+            self.parameters['k'] = k_name
+        self.k = np.array([k_value], dtype=float)
+
+        # define active species
         self.active_species = np.where(self.propensity != 0)[0]
         self.num_active_species = self.active_species.size
-
-        # predefine active species mask
         self._propensity = self.propensity[self.active_species]
 
         # assign reaction rate sensitivities
@@ -507,10 +577,12 @@ class SumReaction:
         self.ribosome_sensitive = False
 
     def shift(self, shift):
-
-        stoichiometry = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
-        propensity = np.hstack((np.zeros(shift, dtype=int), self.propensity))
-        rxn = SumReaction(stoichiometry, propensity, self.rate_constant[0], self.rxn_type)
+        s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
+        p = np.hstack((np.zeros(shift, dtype=int), self.propensity))
+        kw = dict(k=self.k[0],
+                  rxn_type=self.rxn_type,
+                  parameters=self.parameters)
+        rxn = SumReaction(s, p, **kw)
         return rxn
 
     def get_rate(self, states, input_value=0, discrete=True):
@@ -531,7 +603,7 @@ class SumReaction:
         activities = _states * self._propensity
 
         # incorporate input dependence
-        rate = self.rate_constant * functools.reduce(add, activities)
+        rate = self.k * functools.reduce(add, activities)
 
         if rate < 0:
             rate *= 0
@@ -549,7 +621,7 @@ class IntegralController(SumReaction):
 
 class Coupling:
 
-    def __init__(self, stoichiometry=None, propensity=None, k=1, a=1, w=1,repressors=None, rxn_type='coupling'):
+    def __init__(self, stoichiometry=None, propensity=None, k=1, a=1, w=1,repressors=None, rxn_type='coupling', parameters=None):
         """
         Class describes a single coupling pathway.
 
@@ -578,10 +650,25 @@ class Coupling:
             propensity = np.zeros(len(stoichiometry))
         self.propensity = np.array(propensity, dtype=np.float64)
 
-        # set constants
-        self.rate_constant = np.array([k], dtype=float)
-        self.a = a
-        self.w = w
+        # set parameters
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+
+        k_value, k_name = name_parameter(k, 'k')
+        if 'k' not in self.parameters.keys():
+            self.parameters['k'] = k_name
+        self.k = np.array([k_value], dtype=float)
+
+        a_value, a_name = name_parameter(a, 'a')
+        if 'a' not in self.parameters.keys():
+            self.parameters['a'] = a_name
+        self.a = a_value
+
+        w_value, w_name = name_parameter(w, 'w')
+        if 'w' not in self.parameters.keys():
+            self.parameters['w'] = w_name
+        self.w = w_value
 
         # add repressors
         if repressors is None:
@@ -608,9 +695,10 @@ class Coupling:
         # shift repressors
         repressors = [rep.shift(shift) for rep in self.repressors]
 
-        kw = dict(k=self.rate_constant[0],
+        kw = dict(k=self.k[0],
                   a=self.a,
                   w=self.w,
+                  parameter_names=self.parameter_names,
                   repressors=repressors,
                   rxn_type=self.rxn_type)
 
@@ -644,7 +732,7 @@ class Coupling:
         # apply constants
         N = self.active_species.size
         rate *= (self.a*self.w / (1+self.w * (N - 1)))
-        rate += self.rate_constant[0]
+        rate += self.k[0]
 
         # get repressor inhibition effects
         unoccupied_sites = 1

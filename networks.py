@@ -333,7 +333,7 @@ class MutableNetwork(Network):
         rxn_indices = np.random.randint(len(self.reactions), size=modifications)
         factors = 2**np.random.uniform(low=-1, high=1, size=modifications)
         for index, factor in zip(rxn_indices, factors):
-            self.reactions[index].rate_constant *= factor
+            self.reactions[index].k *= factor
 
     def add_nodes(self, additions=1):
         """
@@ -678,7 +678,7 @@ class Graph:
         return rate_law
 
     def format_rate_constant(self, rxn):
-        rate_constant = '{:2.5f}'.format(rxn.rate_constant[0])
+        rate_constant = '{:2.5f}'.format(rxn.k[0])
         if type(rxn) == EnzymaticReaction:
             for i, coeff in enumerate(rxn.rate_modifier):
                 if coeff != 0:
