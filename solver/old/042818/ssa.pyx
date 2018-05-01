@@ -1,4 +1,4 @@
-# cython: profile=False
+# cython: profile=True
 
 from rxndiffusion.solver.cyRNG import cyRNG
 from rxndiffusion.solver.rxns import RateFunction
@@ -49,18 +49,18 @@ cdef class cNetwork:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef void update_all(self, array states, array input_value, array cumulative) nogil:
-        self.rate_function.update_all(states, input_value, cumulative)
+    cdef update_all(self, array states, array input_value, array cumulative):
+        return self.rate_function.update_all(states, input_value, cumulative)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef void update_input(self, array states, array input_value, array cumulative, int dim) nogil:
-        self.rate_function.update_input(states, input_value, cumulative, dim)
+    cdef update_input(self, array states, array input_value, array cumulative, int dim):
+        return self.rate_function.update_input(states, input_value, cumulative, dim)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef void update(self, array states, array input_value, array cumulative, int rxn_fired) nogil:
-        self.rate_function.update(states, input_value, cumulative, rxn_fired)
+    cdef update(self, array states, array input_value, array cumulative, int rxn_fired):
+        return self.rate_function.update(states, input_value, cumulative, rxn_fired)
 
 
 cdef class cSolver:
@@ -133,15 +133,12 @@ cdef class cSolver:
         cdef np.ndarray trajectories
 
         # initialize input
-        cdef array input_value, new_input_value
         cdef bint null_input = 0
         if input_function is None:
             null_input = 1
-            input_value = array('d', np.zeros(self.network.I))
-        else:
-            input_value = input_function.get_signal(0)
 
         # declare items used throughout simulation
+        cdef array input_value, new_input_value
         cdef array rxn_rates
         cdef array rxn_order
         cdef double total_rate
@@ -149,6 +146,7 @@ cdef class cSolver:
         cdef double tau
 
         # initialize all rates and sort order
+        input_value = input_function.get_signal(0)
         self.network.update_all(states, input_value, cumulative)
         rxn_rates = self.network.get_rxn_rates()
         rxn_order = array('l', np.argsort(rxn_rates)[::-1])
@@ -166,25 +164,21 @@ cdef class cSolver:
                 t_index += 1
                 rxn_order = array('l', np.argsort(rxn_rates)[::-1])
 
-            if null_input == 0:
+            # compute input value
+            new_input_value = self.get_input_value(input_function, t)
 
-                # compute input value
-                new_input_value = self.get_input_value(input_function, t)
-
-                # check if input changed and input rates accordingly
-                for index in xrange(self.network.I):
-                    if new_input_value.data.as_doubles[index] != input_value.data.as_doubles[index]:
-                        input_value.data.as_doubles[index] = new_input_value.data.as_doubles[index]
-                        self.network.update_input(states, input_value, cumulative, index)
+            # check if input changed and input rates accordingly
+            for index in xrange(self.network.I):
+                if new_input_value.data.as_doubles[index] != input_value.data.as_doubles[index]:
+                    input_value.data.as_doubles[index] = new_input_value.data.as_doubles[index]
+                    self.network.update_input(states, input_value, cumulative, index)
 
             # update reaction rates
             self.network.update(states, input_value, cumulative, rxn_fired)
 
             # get rates
-            #rxn_rates = self.network.get_rxn_rates()
-            #total_rate = self.network.get_total_rate()
-            rxn_rates = self.network.rate_function.rates
-            total_rate = self.network.rate_function.total_rate
+            rxn_rates = self.network.get_rxn_rates()
+            total_rate = self.network.get_total_rate()
 
             # if total rate is zero, keep stepping until input changes
             if total_rate == 0:
@@ -528,7 +522,7 @@ class Solver:
 
         # set input function
         if input_function is None:
-            input_function = None#cSignal([0 for _ in range(self.I)])
+            input_function = cSignal([0 for _ in range(self.I)])
         else:
             input_function = deepcopy(input_function)
 

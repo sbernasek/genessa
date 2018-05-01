@@ -901,6 +901,31 @@ static void __Pyx_RaiseArgtupleInvalid(const char* func_name, int exact,
 /* KeywordStringCheck.proto */
 static int __Pyx_CheckKeywordStrings(PyObject *kwdict, const char* function_name, int kw_allowed);
 
+/* PyFunctionFastCall.proto */
+#if CYTHON_FAST_PYCALL
+#define __Pyx_PyFunction_FastCall(func, args, nargs)\
+    __Pyx_PyFunction_FastCallDict((func), (args), (nargs), NULL)
+#if 1 || PY_VERSION_HEX < 0x030600B1
+static PyObject *__Pyx_PyFunction_FastCallDict(PyObject *func, PyObject **args, int nargs, PyObject *kwargs);
+#else
+#define __Pyx_PyFunction_FastCallDict(func, args, nargs, kwargs) _PyFunction_FastCallDict(func, args, nargs, kwargs)
+#endif
+#endif
+
+/* PyCFunctionFastCall.proto */
+#if CYTHON_FAST_PYCCALL
+static CYTHON_INLINE PyObject *__Pyx_PyCFunction_FastCall(PyObject *func, PyObject **args, Py_ssize_t nargs);
+#else
+#define __Pyx_PyCFunction_FastCall(func, args, nargs)  (assert(0), NULL)
+#endif
+
+/* PyObjectCall.proto */
+#if CYTHON_COMPILING_IN_CPYTHON
+static CYTHON_INLINE PyObject* __Pyx_PyObject_Call(PyObject *func, PyObject *arg, PyObject *kw);
+#else
+#define __Pyx_PyObject_Call(func, arg, kw) PyObject_Call(func, arg, kw)
+#endif
+
 /* PyThreadStateGet.proto */
 #if CYTHON_FAST_THREAD_STATE
 #define __Pyx_PyThreadState_declare  PyThreadState *__pyx_tstate;
@@ -937,237 +962,10 @@ static CYTHON_INLINE void __Pyx_ErrFetchInState(PyThreadState *tstate, PyObject 
 #define __Pyx_ErrFetch(type, value, tb)  PyErr_Fetch(type, value, tb)
 #endif
 
-/* Profile.proto */
-#ifndef CYTHON_PROFILE
-#if CYTHON_COMPILING_IN_PYPY || CYTHON_COMPILING_IN_PYSTON
-  #define CYTHON_PROFILE 0
-#else
-  #define CYTHON_PROFILE 1
-#endif
-#endif
-#ifndef CYTHON_TRACE_NOGIL
-  #define CYTHON_TRACE_NOGIL 0
-#else
-  #if CYTHON_TRACE_NOGIL && !defined(CYTHON_TRACE)
-    #define CYTHON_TRACE 1
-  #endif
-#endif
-#ifndef CYTHON_TRACE
-  #define CYTHON_TRACE 0
-#endif
-#if CYTHON_TRACE
-  #undef CYTHON_PROFILE_REUSE_FRAME
-#endif
-#ifndef CYTHON_PROFILE_REUSE_FRAME
-  #define CYTHON_PROFILE_REUSE_FRAME 0
-#endif
-#if CYTHON_PROFILE || CYTHON_TRACE
-  #include "compile.h"
-  #include "frameobject.h"
-  #include "traceback.h"
-  #if CYTHON_PROFILE_REUSE_FRAME
-    #define CYTHON_FRAME_MODIFIER static
-    #define CYTHON_FRAME_DEL(frame)
-  #else
-    #define CYTHON_FRAME_MODIFIER
-    #define CYTHON_FRAME_DEL(frame) Py_CLEAR(frame)
-  #endif
-  #define __Pyx_TraceDeclarations\
-  static PyCodeObject *__pyx_frame_code = NULL;\
-  CYTHON_FRAME_MODIFIER PyFrameObject *__pyx_frame = NULL;\
-  int __Pyx_use_tracing = 0;
-  #define __Pyx_TraceFrameInit(codeobj)\
-  if (codeobj) __pyx_frame_code = (PyCodeObject*) codeobj;
-  #ifdef WITH_THREAD
-  #define __Pyx_TraceCall(funcname, srcfile, firstlineno, nogil, goto_error)\
-  if (nogil) {\
-      if (CYTHON_TRACE_NOGIL) {\
-          PyThreadState *tstate;\
-          PyGILState_STATE state = PyGILState_Ensure();\
-          tstate = __Pyx_PyThreadState_Current;\
-          if (unlikely(tstate->use_tracing) && !tstate->tracing &&\
-                  (tstate->c_profilefunc || (CYTHON_TRACE && tstate->c_tracefunc))) {\
-              __Pyx_use_tracing = __Pyx_TraceSetupAndCall(&__pyx_frame_code, &__pyx_frame, tstate, funcname, srcfile, firstlineno);\
-          }\
-          PyGILState_Release(state);\
-          if (unlikely(__Pyx_use_tracing < 0)) goto_error;\
-      }\
-  } else {\
-      PyThreadState* tstate = PyThreadState_GET();\
-      if (unlikely(tstate->use_tracing) && !tstate->tracing &&\
-              (tstate->c_profilefunc || (CYTHON_TRACE && tstate->c_tracefunc))) {\
-          __Pyx_use_tracing = __Pyx_TraceSetupAndCall(&__pyx_frame_code, &__pyx_frame, tstate, funcname, srcfile, firstlineno);\
-          if (unlikely(__Pyx_use_tracing < 0)) goto_error;\
-      }\
-  }
-  #else
-  #define __Pyx_TraceCall(funcname, srcfile, firstlineno, nogil, goto_error)\
-  {   PyThreadState* tstate = PyThreadState_GET();\
-      if (unlikely(tstate->use_tracing) && !tstate->tracing &&\
-              (tstate->c_profilefunc || (CYTHON_TRACE && tstate->c_tracefunc))) {\
-          __Pyx_use_tracing = __Pyx_TraceSetupAndCall(&__pyx_frame_code, &__pyx_frame, tstate, funcname, srcfile, firstlineno);\
-          if (unlikely(__Pyx_use_tracing < 0)) goto_error;\
-      }\
-  }
-  #endif
-  #define __Pyx_TraceException()\
-  if (likely(!__Pyx_use_tracing)); else {\
-      PyThreadState* tstate = __Pyx_PyThreadState_Current;\
-      if (tstate->use_tracing &&\
-              (tstate->c_profilefunc || (CYTHON_TRACE && tstate->c_tracefunc))) {\
-          tstate->tracing++;\
-          tstate->use_tracing = 0;\
-          PyObject *exc_info = __Pyx_GetExceptionTuple(tstate);\
-          if (exc_info) {\
-              if (CYTHON_TRACE && tstate->c_tracefunc)\
-                  tstate->c_tracefunc(\
-                      tstate->c_traceobj, __pyx_frame, PyTrace_EXCEPTION, exc_info);\
-              tstate->c_profilefunc(\
-                  tstate->c_profileobj, __pyx_frame, PyTrace_EXCEPTION, exc_info);\
-              Py_DECREF(exc_info);\
-          }\
-          tstate->use_tracing = 1;\
-          tstate->tracing--;\
-      }\
-  }
-  static void __Pyx_call_return_trace_func(PyThreadState *tstate, PyFrameObject *frame, PyObject *result) {
-      PyObject *type, *value, *traceback;
-      __Pyx_ErrFetchInState(tstate, &type, &value, &traceback);
-      tstate->tracing++;
-      tstate->use_tracing = 0;
-      if (CYTHON_TRACE && tstate->c_tracefunc)
-          tstate->c_tracefunc(tstate->c_traceobj, frame, PyTrace_RETURN, result);
-      if (tstate->c_profilefunc)
-          tstate->c_profilefunc(tstate->c_profileobj, frame, PyTrace_RETURN, result);
-      CYTHON_FRAME_DEL(frame);
-      tstate->use_tracing = 1;
-      tstate->tracing--;
-      __Pyx_ErrRestoreInState(tstate, type, value, traceback);
-  }
-  #ifdef WITH_THREAD
-  #define __Pyx_TraceReturn(result, nogil)\
-  if (likely(!__Pyx_use_tracing)); else {\
-      if (nogil) {\
-          if (CYTHON_TRACE_NOGIL) {\
-              PyThreadState *tstate;\
-              PyGILState_STATE state = PyGILState_Ensure();\
-              tstate = __Pyx_PyThreadState_Current;\
-              if (tstate->use_tracing) {\
-                  __Pyx_call_return_trace_func(tstate, __pyx_frame, (PyObject*)result);\
-              }\
-              PyGILState_Release(state);\
-          }\
-      } else {\
-          PyThreadState* tstate = __Pyx_PyThreadState_Current;\
-          if (tstate->use_tracing) {\
-              __Pyx_call_return_trace_func(tstate, __pyx_frame, (PyObject*)result);\
-          }\
-      }\
-  }
-  #else
-  #define __Pyx_TraceReturn(result, nogil)\
-  if (likely(!__Pyx_use_tracing)); else {\
-      PyThreadState* tstate = __Pyx_PyThreadState_Current;\
-      if (tstate->use_tracing) {\
-          __Pyx_call_return_trace_func(tstate, __pyx_frame, (PyObject*)result);\
-      }\
-  }
-  #endif
-  static PyCodeObject *__Pyx_createFrameCodeObject(const char *funcname, const char *srcfile, int firstlineno);
-  static int __Pyx_TraceSetupAndCall(PyCodeObject** code, PyFrameObject** frame, PyThreadState* tstate, const char *funcname, const char *srcfile, int firstlineno);
-#else
-  #define __Pyx_TraceDeclarations
-  #define __Pyx_TraceFrameInit(codeobj)
-  #define __Pyx_TraceCall(funcname, srcfile, firstlineno, nogil, goto_error)   if ((1)); else goto_error;
-  #define __Pyx_TraceException()
-  #define __Pyx_TraceReturn(result, nogil)
-#endif
-#if CYTHON_TRACE
-  static int __Pyx_call_line_trace_func(PyThreadState *tstate, PyFrameObject *frame, int lineno) {
-      int ret;
-      PyObject *type, *value, *traceback;
-      __Pyx_ErrFetchInState(tstate, &type, &value, &traceback);
-      __Pyx_PyFrame_SetLineNumber(frame, lineno);
-      tstate->tracing++;
-      tstate->use_tracing = 0;
-      ret = tstate->c_tracefunc(tstate->c_traceobj, frame, PyTrace_LINE, NULL);
-      tstate->use_tracing = 1;
-      tstate->tracing--;
-      if (likely(!ret)) {
-          __Pyx_ErrRestoreInState(tstate, type, value, traceback);
-      } else {
-          Py_XDECREF(type);
-          Py_XDECREF(value);
-          Py_XDECREF(traceback);
-      }
-      return ret;
-  }
-  #ifdef WITH_THREAD
-  #define __Pyx_TraceLine(lineno, nogil, goto_error)\
-  if (likely(!__Pyx_use_tracing)); else {\
-      if (nogil) {\
-          if (CYTHON_TRACE_NOGIL) {\
-              int ret = 0;\
-              PyThreadState *tstate;\
-              PyGILState_STATE state = PyGILState_Ensure();\
-              tstate = __Pyx_PyThreadState_Current;\
-              if (unlikely(tstate->use_tracing && tstate->c_tracefunc && __pyx_frame->f_trace)) {\
-                  ret = __Pyx_call_line_trace_func(tstate, __pyx_frame, lineno);\
-              }\
-              PyGILState_Release(state);\
-              if (unlikely(ret)) goto_error;\
-          }\
-      } else {\
-          PyThreadState* tstate = __Pyx_PyThreadState_Current;\
-          if (unlikely(tstate->use_tracing && tstate->c_tracefunc && __pyx_frame->f_trace)) {\
-              int ret = __Pyx_call_line_trace_func(tstate, __pyx_frame, lineno);\
-              if (unlikely(ret)) goto_error;\
-          }\
-      }\
-  }
-  #else
-  #define __Pyx_TraceLine(lineno, nogil, goto_error)\
-  if (likely(!__Pyx_use_tracing)); else {\
-      PyThreadState* tstate = __Pyx_PyThreadState_Current;\
-      if (unlikely(tstate->use_tracing && tstate->c_tracefunc && __pyx_frame->f_trace)) {\
-          int ret = __Pyx_call_line_trace_func(tstate, __pyx_frame, lineno);\
-          if (unlikely(ret)) goto_error;\
-      }\
-  }
-  #endif
-#else
-  #define __Pyx_TraceLine(lineno, nogil, goto_error)   if ((1)); else goto_error;
-#endif
-
 /* WriteUnraisableException.proto */
 static void __Pyx_WriteUnraisable(const char *name, int clineno,
                                   int lineno, const char *filename,
                                   int full_traceback, int nogil);
-
-/* PyFunctionFastCall.proto */
-#if CYTHON_FAST_PYCALL
-#define __Pyx_PyFunction_FastCall(func, args, nargs)\
-    __Pyx_PyFunction_FastCallDict((func), (args), (nargs), NULL)
-#if 1 || PY_VERSION_HEX < 0x030600B1
-static PyObject *__Pyx_PyFunction_FastCallDict(PyObject *func, PyObject **args, int nargs, PyObject *kwargs);
-#else
-#define __Pyx_PyFunction_FastCallDict(func, args, nargs, kwargs) _PyFunction_FastCallDict(func, args, nargs, kwargs)
-#endif
-#endif
-
-/* PyCFunctionFastCall.proto */
-#if CYTHON_FAST_PYCCALL
-static CYTHON_INLINE PyObject *__Pyx_PyCFunction_FastCall(PyObject *func, PyObject **args, Py_ssize_t nargs);
-#else
-#define __Pyx_PyCFunction_FastCall(func, args, nargs)  (assert(0), NULL)
-#endif
-
-/* PyObjectCall.proto */
-#if CYTHON_COMPILING_IN_CPYTHON
-static CYTHON_INLINE PyObject* __Pyx_PyObject_Call(PyObject *func, PyObject *arg, PyObject *kw);
-#else
-#define __Pyx_PyObject_Call(func, arg, kw) PyObject_Call(func, arg, kw)
-#endif
 
 /* RaiseDoubleKeywords.proto */
 static void __Pyx_RaiseDoubleKeywordsError(const char* func_name, PyObject* kw_name);
@@ -1431,10 +1229,8 @@ static int __pyx_pw_6solver_5cyRNG_5cyRNG_1__cinit__(PyObject *__pyx_v_self, PyO
 
 static int __pyx_pf_6solver_5cyRNG_5cyRNG___cinit__(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self) {
   int __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__cinit__", 0);
-  __Pyx_TraceCall("__cinit__", __pyx_f[1], 63, 0, __PYX_ERR(1, 63, __pyx_L1_error));
 
   /* "solver/cyRNG.pyx":64
  *     cdef SimpleRNG* thisptr # hold a C++ instance
@@ -1455,12 +1251,6 @@ static int __pyx_pf_6solver_5cyRNG_5cyRNG___cinit__(struct __pyx_obj_6solver_5cy
 
   /* function exit code */
   __pyx_r = 0;
-  goto __pyx_L0;
-  __pyx_L1_error:;
-  __Pyx_AddTraceback("solver.cyRNG.cyRNG.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
-  __pyx_r = -1;
-  __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -1485,10 +1275,8 @@ static void __pyx_pw_6solver_5cyRNG_5cyRNG_3__dealloc__(PyObject *__pyx_v_self) 
 }
 
 static void __pyx_pf_6solver_5cyRNG_5cyRNG_2__dealloc__(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self) {
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__dealloc__", 0);
-  __Pyx_TraceCall("__dealloc__", __pyx_f[1], 65, 0, __PYX_ERR(1, 65, __pyx_L1_error));
 
   /* "solver/cyRNG.pyx":66
  *         self.thisptr = new SimpleRNG()
@@ -1508,11 +1296,6 @@ static void __pyx_pf_6solver_5cyRNG_5cyRNG_2__dealloc__(struct __pyx_obj_6solver
  */
 
   /* function exit code */
-  goto __pyx_L0;
-  __pyx_L1_error:;
-  __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.__dealloc__", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
-  __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
 }
 
@@ -1526,7 +1309,6 @@ static void __pyx_pf_6solver_5cyRNG_5cyRNG_2__dealloc__(struct __pyx_obj_6solver
 
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_5SetState(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static void __pyx_f_6solver_5cyRNG_5cyRNG_SetState(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, unsigned int __pyx_v_u, unsigned int __pyx_v_v, int __pyx_skip_dispatch) {
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -1537,7 +1319,6 @@ static void __pyx_f_6solver_5cyRNG_5cyRNG_SetState(struct __pyx_obj_6solver_5cyR
   int __pyx_t_7;
   PyObject *__pyx_t_8 = NULL;
   __Pyx_RefNannySetupContext("SetState", 0);
-  __Pyx_TraceCall("SetState", __pyx_f[1], 69, 0, __PYX_ERR(1, 69, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -1635,7 +1416,6 @@ static void __pyx_f_6solver_5cyRNG_5cyRNG_SetState(struct __pyx_obj_6solver_5cyR
   __Pyx_XDECREF(__pyx_t_8);
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.SetState", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
 }
 
@@ -1702,11 +1482,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_5SetState(PyObject *__pyx_v_self
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_4SetState(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, unsigned int __pyx_v_u, unsigned int __pyx_v_v) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("SetState", 0);
-  __Pyx_TraceCall("SetState (wrapper)", __pyx_f[1], 69, 0, __PYX_ERR(1, 69, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = __Pyx_void_to_None(__pyx_f_6solver_5cyRNG_5cyRNG_SetState(__pyx_v_self, __pyx_v_u, __pyx_v_v, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 69, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -1721,7 +1499,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_4SetState(struct __pyx_obj_6solv
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -1737,7 +1514,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_4SetState(struct __pyx_obj_6solv
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_7GetUniform(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetUniform(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -1745,7 +1521,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetUniform(struct __pyx_obj_6solver_
   PyObject *__pyx_t_4 = NULL;
   double __pyx_t_5;
   __Pyx_RefNannySetupContext("GetUniform", 0);
-  __Pyx_TraceCall("GetUniform", __pyx_f[1], 73, 0, __PYX_ERR(1, 73, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -1808,7 +1583,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetUniform(struct __pyx_obj_6solver_
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetUniform", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -1828,11 +1602,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_7GetUniform(PyObject *__pyx_v_se
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_6GetUniform(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetUniform", 0);
-  __Pyx_TraceCall("GetUniform (wrapper)", __pyx_f[1], 73, 0, __PYX_ERR(1, 73, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetUniform(__pyx_v_self, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 73, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -1847,7 +1619,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_6GetUniform(struct __pyx_obj_6so
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -1863,7 +1634,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_6GetUniform(struct __pyx_obj_6so
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_9GetUint(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
 static unsigned int __pyx_f_6solver_5cyRNG_5cyRNG_GetUint(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, int __pyx_skip_dispatch) {
   unsigned int __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -1871,7 +1641,6 @@ static unsigned int __pyx_f_6solver_5cyRNG_5cyRNG_GetUint(struct __pyx_obj_6solv
   PyObject *__pyx_t_4 = NULL;
   unsigned int __pyx_t_5;
   __Pyx_RefNannySetupContext("GetUint", 0);
-  __Pyx_TraceCall("GetUint", __pyx_f[1], 77, 0, __PYX_ERR(1, 77, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -1934,7 +1703,6 @@ static unsigned int __pyx_f_6solver_5cyRNG_5cyRNG_GetUint(struct __pyx_obj_6solv
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetUint", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -1954,11 +1722,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_9GetUint(PyObject *__pyx_v_self,
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_8GetUint(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetUint", 0);
-  __Pyx_TraceCall("GetUint (wrapper)", __pyx_f[1], 77, 0, __PYX_ERR(1, 77, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = __Pyx_PyInt_From_unsigned_int(__pyx_f_6solver_5cyRNG_5cyRNG_GetUint(__pyx_v_self, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 77, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -1973,7 +1739,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_8GetUint(struct __pyx_obj_6solve
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -1989,7 +1754,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_8GetUint(struct __pyx_obj_6solve
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_11GetNormal(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetNormal(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_mean, double __pyx_v_std_dev, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -2001,7 +1765,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetNormal(struct __pyx_obj_6solver_5
   PyObject *__pyx_t_8 = NULL;
   double __pyx_t_9;
   __Pyx_RefNannySetupContext("GetNormal", 0);
-  __Pyx_TraceCall("GetNormal", __pyx_f[1], 81, 0, __PYX_ERR(1, 81, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -2102,7 +1865,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetNormal(struct __pyx_obj_6solver_5
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetNormal", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2170,11 +1932,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_11GetNormal(PyObject *__pyx_v_se
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_10GetNormal(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_mean, double __pyx_v_std_dev) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetNormal", 0);
-  __Pyx_TraceCall("GetNormal (wrapper)", __pyx_f[1], 81, 0, __PYX_ERR(1, 81, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetNormal(__pyx_v_self, __pyx_v_mean, __pyx_v_std_dev, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 81, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -2189,7 +1949,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_10GetNormal(struct __pyx_obj_6so
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2205,7 +1964,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_10GetNormal(struct __pyx_obj_6so
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_13GetExponential(PyObject *__pyx_v_self, PyObject *__pyx_arg_mean); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetExponential(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_mean, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -2215,7 +1973,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetExponential(struct __pyx_obj_6sol
   PyObject *__pyx_t_6 = NULL;
   double __pyx_t_7;
   __Pyx_RefNannySetupContext("GetExponential", 0);
-  __Pyx_TraceCall("GetExponential", __pyx_f[1], 85, 0, __PYX_ERR(1, 85, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -2310,7 +2067,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetExponential(struct __pyx_obj_6sol
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetExponential", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2340,11 +2096,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_13GetExponential(PyObject *__pyx
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_12GetExponential(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_mean) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetExponential", 0);
-  __Pyx_TraceCall("GetExponential (wrapper)", __pyx_f[1], 85, 0, __PYX_ERR(1, 85, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetExponential(__pyx_v_self, __pyx_v_mean, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 85, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -2359,7 +2113,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_12GetExponential(struct __pyx_ob
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2375,7 +2128,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_12GetExponential(struct __pyx_ob
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_15GetGamma(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetGamma(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_shape, double __pyx_v_scale, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -2387,7 +2139,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetGamma(struct __pyx_obj_6solver_5c
   PyObject *__pyx_t_8 = NULL;
   double __pyx_t_9;
   __Pyx_RefNannySetupContext("GetGamma", 0);
-  __Pyx_TraceCall("GetGamma", __pyx_f[1], 89, 0, __PYX_ERR(1, 89, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -2488,7 +2239,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetGamma(struct __pyx_obj_6solver_5c
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetGamma", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2556,11 +2306,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_15GetGamma(PyObject *__pyx_v_sel
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_14GetGamma(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_shape, double __pyx_v_scale) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetGamma", 0);
-  __Pyx_TraceCall("GetGamma (wrapper)", __pyx_f[1], 89, 0, __PYX_ERR(1, 89, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetGamma(__pyx_v_self, __pyx_v_shape, __pyx_v_scale, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 89, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -2575,7 +2323,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_14GetGamma(struct __pyx_obj_6sol
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2591,7 +2338,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_14GetGamma(struct __pyx_obj_6sol
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_17GetChiSquare(PyObject *__pyx_v_self, PyObject *__pyx_arg_degreesOfFreedom); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetChiSquare(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_degreesOfFreedom, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -2601,7 +2347,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetChiSquare(struct __pyx_obj_6solve
   PyObject *__pyx_t_6 = NULL;
   double __pyx_t_7;
   __Pyx_RefNannySetupContext("GetChiSquare", 0);
-  __Pyx_TraceCall("GetChiSquare", __pyx_f[1], 93, 0, __PYX_ERR(1, 93, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -2696,7 +2441,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetChiSquare(struct __pyx_obj_6solve
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetChiSquare", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2726,11 +2470,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_17GetChiSquare(PyObject *__pyx_v
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_16GetChiSquare(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_degreesOfFreedom) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetChiSquare", 0);
-  __Pyx_TraceCall("GetChiSquare (wrapper)", __pyx_f[1], 93, 0, __PYX_ERR(1, 93, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetChiSquare(__pyx_v_self, __pyx_v_degreesOfFreedom, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 93, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -2745,7 +2487,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_16GetChiSquare(struct __pyx_obj_
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2761,7 +2502,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_16GetChiSquare(struct __pyx_obj_
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_19GetInverseGamma(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetInverseGamma(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_shape, double __pyx_v_scale, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -2773,7 +2513,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetInverseGamma(struct __pyx_obj_6so
   PyObject *__pyx_t_8 = NULL;
   double __pyx_t_9;
   __Pyx_RefNannySetupContext("GetInverseGamma", 0);
-  __Pyx_TraceCall("GetInverseGamma", __pyx_f[1], 97, 0, __PYX_ERR(1, 97, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -2874,7 +2613,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetInverseGamma(struct __pyx_obj_6so
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetInverseGamma", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2942,11 +2680,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_19GetInverseGamma(PyObject *__py
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_18GetInverseGamma(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_shape, double __pyx_v_scale) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetInverseGamma", 0);
-  __Pyx_TraceCall("GetInverseGamma (wrapper)", __pyx_f[1], 97, 0, __PYX_ERR(1, 97, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetInverseGamma(__pyx_v_self, __pyx_v_shape, __pyx_v_scale, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 97, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -2961,7 +2697,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_18GetInverseGamma(struct __pyx_o
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -2977,7 +2712,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_18GetInverseGamma(struct __pyx_o
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_21GetWeibull(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetWeibull(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_shape, double __pyx_v_scale, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -2989,7 +2723,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetWeibull(struct __pyx_obj_6solver_
   PyObject *__pyx_t_8 = NULL;
   double __pyx_t_9;
   __Pyx_RefNannySetupContext("GetWeibull", 0);
-  __Pyx_TraceCall("GetWeibull", __pyx_f[1], 101, 0, __PYX_ERR(1, 101, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -3090,7 +2823,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetWeibull(struct __pyx_obj_6solver_
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetWeibull", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3158,11 +2890,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_21GetWeibull(PyObject *__pyx_v_s
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_20GetWeibull(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_shape, double __pyx_v_scale) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetWeibull", 0);
-  __Pyx_TraceCall("GetWeibull (wrapper)", __pyx_f[1], 101, 0, __PYX_ERR(1, 101, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetWeibull(__pyx_v_self, __pyx_v_shape, __pyx_v_scale, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 101, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -3177,7 +2907,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_20GetWeibull(struct __pyx_obj_6s
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3193,7 +2922,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_20GetWeibull(struct __pyx_obj_6s
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_23GetCauchy(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetCauchy(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_median, double __pyx_v_scale, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -3205,7 +2933,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetCauchy(struct __pyx_obj_6solver_5
   PyObject *__pyx_t_8 = NULL;
   double __pyx_t_9;
   __Pyx_RefNannySetupContext("GetCauchy", 0);
-  __Pyx_TraceCall("GetCauchy", __pyx_f[1], 105, 0, __PYX_ERR(1, 105, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -3306,7 +3033,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetCauchy(struct __pyx_obj_6solver_5
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetCauchy", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3374,11 +3100,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_23GetCauchy(PyObject *__pyx_v_se
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_22GetCauchy(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_median, double __pyx_v_scale) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetCauchy", 0);
-  __Pyx_TraceCall("GetCauchy (wrapper)", __pyx_f[1], 105, 0, __PYX_ERR(1, 105, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetCauchy(__pyx_v_self, __pyx_v_median, __pyx_v_scale, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 105, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -3393,7 +3117,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_22GetCauchy(struct __pyx_obj_6so
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3409,7 +3132,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_22GetCauchy(struct __pyx_obj_6so
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_25GetStudentT(PyObject *__pyx_v_self, PyObject *__pyx_arg_degreesOfFreedom); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetStudentT(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_degreesOfFreedom, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -3419,7 +3141,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetStudentT(struct __pyx_obj_6solver
   PyObject *__pyx_t_6 = NULL;
   double __pyx_t_7;
   __Pyx_RefNannySetupContext("GetStudentT", 0);
-  __Pyx_TraceCall("GetStudentT", __pyx_f[1], 109, 0, __PYX_ERR(1, 109, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -3514,7 +3235,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetStudentT(struct __pyx_obj_6solver
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetStudentT", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3544,11 +3264,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_25GetStudentT(PyObject *__pyx_v_
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_24GetStudentT(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_degreesOfFreedom) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetStudentT", 0);
-  __Pyx_TraceCall("GetStudentT (wrapper)", __pyx_f[1], 109, 0, __PYX_ERR(1, 109, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetStudentT(__pyx_v_self, __pyx_v_degreesOfFreedom, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 109, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -3563,7 +3281,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_24GetStudentT(struct __pyx_obj_6
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3579,7 +3296,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_24GetStudentT(struct __pyx_obj_6
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_27GetLaplace(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetLaplace(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_mean, double __pyx_v_scale, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -3591,7 +3307,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetLaplace(struct __pyx_obj_6solver_
   PyObject *__pyx_t_8 = NULL;
   double __pyx_t_9;
   __Pyx_RefNannySetupContext("GetLaplace", 0);
-  __Pyx_TraceCall("GetLaplace", __pyx_f[1], 113, 0, __PYX_ERR(1, 113, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -3692,7 +3407,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetLaplace(struct __pyx_obj_6solver_
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetLaplace", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3760,11 +3474,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_27GetLaplace(PyObject *__pyx_v_s
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_26GetLaplace(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_mean, double __pyx_v_scale) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetLaplace", 0);
-  __Pyx_TraceCall("GetLaplace (wrapper)", __pyx_f[1], 113, 0, __PYX_ERR(1, 113, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetLaplace(__pyx_v_self, __pyx_v_mean, __pyx_v_scale, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 113, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -3779,7 +3491,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_26GetLaplace(struct __pyx_obj_6s
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3795,7 +3506,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_26GetLaplace(struct __pyx_obj_6s
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_29GetLogNormal(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetLogNormal(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_mu, double __pyx_v_sigma, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -3807,7 +3517,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetLogNormal(struct __pyx_obj_6solve
   PyObject *__pyx_t_8 = NULL;
   double __pyx_t_9;
   __Pyx_RefNannySetupContext("GetLogNormal", 0);
-  __Pyx_TraceCall("GetLogNormal", __pyx_f[1], 117, 0, __PYX_ERR(1, 117, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -3908,7 +3617,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetLogNormal(struct __pyx_obj_6solve
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetLogNormal", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -3976,11 +3684,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_29GetLogNormal(PyObject *__pyx_v
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_28GetLogNormal(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_mu, double __pyx_v_sigma) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetLogNormal", 0);
-  __Pyx_TraceCall("GetLogNormal (wrapper)", __pyx_f[1], 117, 0, __PYX_ERR(1, 117, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetLogNormal(__pyx_v_self, __pyx_v_mu, __pyx_v_sigma, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 117, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -3995,7 +3701,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_28GetLogNormal(struct __pyx_obj_
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -4011,7 +3716,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_28GetLogNormal(struct __pyx_obj_
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_31GetBeta(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static double __pyx_f_6solver_5cyRNG_5cyRNG_GetBeta(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_a, double __pyx_v_b, int __pyx_skip_dispatch) {
   double __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -4023,7 +3727,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetBeta(struct __pyx_obj_6solver_5cy
   PyObject *__pyx_t_8 = NULL;
   double __pyx_t_9;
   __Pyx_RefNannySetupContext("GetBeta", 0);
-  __Pyx_TraceCall("GetBeta", __pyx_f[1], 121, 0, __PYX_ERR(1, 121, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -4124,7 +3827,6 @@ static double __pyx_f_6solver_5cyRNG_5cyRNG_GetBeta(struct __pyx_obj_6solver_5cy
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetBeta", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -4192,11 +3894,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_31GetBeta(PyObject *__pyx_v_self
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_30GetBeta(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_a, double __pyx_v_b) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetBeta", 0);
-  __Pyx_TraceCall("GetBeta (wrapper)", __pyx_f[1], 121, 0, __PYX_ERR(1, 121, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = PyFloat_FromDouble(__pyx_f_6solver_5cyRNG_5cyRNG_GetBeta(__pyx_v_self, __pyx_v_a, __pyx_v_b, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 121, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -4211,7 +3911,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_30GetBeta(struct __pyx_obj_6solv
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -4226,7 +3925,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_30GetBeta(struct __pyx_obj_6solv
 static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_33GetPoisson(PyObject *__pyx_v_self, PyObject *__pyx_arg_lam); /*proto*/
 static int __pyx_f_6solver_5cyRNG_5cyRNG_GetPoisson(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_lam, int __pyx_skip_dispatch) {
   int __pyx_r;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
@@ -4236,7 +3934,6 @@ static int __pyx_f_6solver_5cyRNG_5cyRNG_GetPoisson(struct __pyx_obj_6solver_5cy
   PyObject *__pyx_t_6 = NULL;
   int __pyx_t_7;
   __Pyx_RefNannySetupContext("GetPoisson", 0);
-  __Pyx_TraceCall("GetPoisson", __pyx_f[1], 125, 0, __PYX_ERR(1, 125, __pyx_L1_error));
   /* Check if called by wrapper */
   if (unlikely(__pyx_skip_dispatch)) ;
   /* Check if overridden in Python */
@@ -4328,7 +4025,6 @@ static int __pyx_f_6solver_5cyRNG_5cyRNG_GetPoisson(struct __pyx_obj_6solver_5cy
   __Pyx_WriteUnraisable("solver.cyRNG.cyRNG.GetPoisson", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
   __pyx_r = 0;
   __pyx_L0:;
-  __Pyx_TraceReturn(Py_None, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -4358,11 +4054,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_33GetPoisson(PyObject *__pyx_v_s
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_32GetPoisson(struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, double __pyx_v_lam) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("GetPoisson", 0);
-  __Pyx_TraceCall("GetPoisson (wrapper)", __pyx_f[1], 125, 0, __PYX_ERR(1, 125, __pyx_L1_error));
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = __Pyx_PyInt_From_int(__pyx_f_6solver_5cyRNG_5cyRNG_GetPoisson(__pyx_v_self, __pyx_v_lam, 1)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 125, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -4377,7 +4071,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_32GetPoisson(struct __pyx_obj_6s
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -4403,11 +4096,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_35__reduce_cython__(PyObject *__
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_34__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("__reduce_cython__", 0);
-  __Pyx_TraceCall("__reduce_cython__", __pyx_f[0], 1, 0, __PYX_ERR(0, 1, __pyx_L1_error));
 
   /* "(tree fragment)":2
  * def __reduce_cython__(self):
@@ -4433,7 +4124,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_34__reduce_cython__(CYTHON_UNUSE
   __Pyx_AddTraceback("solver.cyRNG.cyRNG.__reduce_cython__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -4460,11 +4150,9 @@ static PyObject *__pyx_pw_6solver_5cyRNG_5cyRNG_37__setstate_cython__(PyObject *
 
 static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_36__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_6solver_5cyRNG_cyRNG *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = NULL;
-  __Pyx_TraceDeclarations
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannySetupContext("__setstate_cython__", 0);
-  __Pyx_TraceCall("__setstate_cython__", __pyx_f[0], 3, 0, __PYX_ERR(0, 3, __pyx_L1_error));
 
   /* "(tree fragment)":4
  *     raise TypeError("no default __reduce__ due to non-trivial __cinit__")
@@ -4490,7 +4178,6 @@ static PyObject *__pyx_pf_6solver_5cyRNG_5cyRNG_36__setstate_cython__(CYTHON_UNU
   __Pyx_AddTraceback("solver.cyRNG.cyRNG.__setstate_cython__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __Pyx_XGIVEREF(__pyx_r);
-  __Pyx_TraceReturn(__pyx_r, 0);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -4897,7 +4584,6 @@ static int __pyx_pymod_exec_cyRNG(PyObject *__pyx_pyinit_module)
 #endif
 #endif
 {
-  __Pyx_TraceDeclarations
   PyObject *__pyx_t_1 = NULL;
   __Pyx_RefNannyDeclarations
   #if CYTHON_PEP489_MULTI_PHASE_INIT
@@ -4996,10 +4682,9 @@ if (!__Pyx_RefNanny) {
   #if defined(__Pyx_Generator_USED) || defined(__Pyx_Coroutine_USED)
   if (__Pyx_patch_abc() < 0) __PYX_ERR(1, 1, __pyx_L1_error)
   #endif
-  __Pyx_TraceCall("__Pyx_PyMODINIT_FUNC PyInit_cyRNG(void)", __pyx_f[1], 1, 0, __PYX_ERR(1, 1, __pyx_L1_error));
 
   /* "solver/cyRNG.pyx":1
- * # cython: profile=True             # <<<<<<<<<<<<<<
+ * # cython: profile=False             # <<<<<<<<<<<<<<
  * 
  * """
  */
@@ -5007,7 +4692,6 @@ if (!__Pyx_RefNanny) {
   __Pyx_GOTREF(__pyx_t_1);
   if (PyDict_SetItem(__pyx_d, __pyx_n_s_test, __pyx_t_1) < 0) __PYX_ERR(1, 1, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __Pyx_TraceReturn(Py_None, 0);
 
   /*--- Wrapped vars code ---*/
 
@@ -5143,165 +4827,6 @@ invalid_keyword:
         function_name, key);
     #endif
     return 0;
-}
-
-/* PyErrFetchRestore */
-#if CYTHON_FAST_THREAD_STATE
-static CYTHON_INLINE void __Pyx_ErrRestoreInState(PyThreadState *tstate, PyObject *type, PyObject *value, PyObject *tb) {
-    PyObject *tmp_type, *tmp_value, *tmp_tb;
-    tmp_type = tstate->curexc_type;
-    tmp_value = tstate->curexc_value;
-    tmp_tb = tstate->curexc_traceback;
-    tstate->curexc_type = type;
-    tstate->curexc_value = value;
-    tstate->curexc_traceback = tb;
-    Py_XDECREF(tmp_type);
-    Py_XDECREF(tmp_value);
-    Py_XDECREF(tmp_tb);
-}
-static CYTHON_INLINE void __Pyx_ErrFetchInState(PyThreadState *tstate, PyObject **type, PyObject **value, PyObject **tb) {
-    *type = tstate->curexc_type;
-    *value = tstate->curexc_value;
-    *tb = tstate->curexc_traceback;
-    tstate->curexc_type = 0;
-    tstate->curexc_value = 0;
-    tstate->curexc_traceback = 0;
-}
-#endif
-
-/* Profile */
-#if CYTHON_PROFILE
-static int __Pyx_TraceSetupAndCall(PyCodeObject** code,
-                                   PyFrameObject** frame,
-                                   PyThreadState* tstate,
-                                   const char *funcname,
-                                   const char *srcfile,
-                                   int firstlineno) {
-    PyObject *type, *value, *traceback;
-    int retval;
-    if (*frame == NULL || !CYTHON_PROFILE_REUSE_FRAME) {
-        if (*code == NULL) {
-            *code = __Pyx_createFrameCodeObject(funcname, srcfile, firstlineno);
-            if (*code == NULL) return 0;
-        }
-        *frame = PyFrame_New(
-            tstate,                          /*PyThreadState *tstate*/
-            *code,                           /*PyCodeObject *code*/
-            __pyx_d,                  /*PyObject *globals*/
-            0                                /*PyObject *locals*/
-        );
-        if (*frame == NULL) return 0;
-        if (CYTHON_TRACE && (*frame)->f_trace == NULL) {
-            Py_INCREF(Py_None);
-            (*frame)->f_trace = Py_None;
-        }
-#if PY_VERSION_HEX < 0x030400B1
-    } else {
-        (*frame)->f_tstate = tstate;
-#endif
-    }
-      __Pyx_PyFrame_SetLineNumber(*frame, firstlineno);
-    retval = 1;
-    tstate->tracing++;
-    tstate->use_tracing = 0;
-    __Pyx_ErrFetchInState(tstate, &type, &value, &traceback);
-    #if CYTHON_TRACE
-    if (tstate->c_tracefunc)
-        retval = tstate->c_tracefunc(tstate->c_traceobj, *frame, PyTrace_CALL, NULL) == 0;
-    if (retval && tstate->c_profilefunc)
-    #endif
-        retval = tstate->c_profilefunc(tstate->c_profileobj, *frame, PyTrace_CALL, NULL) == 0;
-    tstate->use_tracing = (tstate->c_profilefunc ||
-                           (CYTHON_TRACE && tstate->c_tracefunc));
-    tstate->tracing--;
-    if (retval) {
-        __Pyx_ErrRestoreInState(tstate, type, value, traceback);
-        return tstate->use_tracing && retval;
-    } else {
-        Py_XDECREF(type);
-        Py_XDECREF(value);
-        Py_XDECREF(traceback);
-        return -1;
-    }
-}
-static PyCodeObject *__Pyx_createFrameCodeObject(const char *funcname, const char *srcfile, int firstlineno) {
-    PyObject *py_srcfile = 0;
-    PyObject *py_funcname = 0;
-    PyCodeObject *py_code = 0;
-    #if PY_MAJOR_VERSION < 3
-    py_funcname = PyString_FromString(funcname);
-    py_srcfile = PyString_FromString(srcfile);
-    #else
-    py_funcname = PyUnicode_FromString(funcname);
-    py_srcfile = PyUnicode_FromString(srcfile);
-    #endif
-    if (!py_funcname | !py_srcfile) goto bad;
-    py_code = PyCode_New(
-        0,
-        #if PY_MAJOR_VERSION >= 3
-        0,
-        #endif
-        0,
-        0,
-        CO_OPTIMIZED | CO_NEWLOCALS,
-        __pyx_empty_bytes,     /*PyObject *code,*/
-        __pyx_empty_tuple,     /*PyObject *consts,*/
-        __pyx_empty_tuple,     /*PyObject *names,*/
-        __pyx_empty_tuple,     /*PyObject *varnames,*/
-        __pyx_empty_tuple,     /*PyObject *freevars,*/
-        __pyx_empty_tuple,     /*PyObject *cellvars,*/
-        py_srcfile,       /*PyObject *filename,*/
-        py_funcname,      /*PyObject *name,*/
-        firstlineno,
-        __pyx_empty_bytes      /*PyObject *lnotab*/
-    );
-bad:
-    Py_XDECREF(py_srcfile);
-    Py_XDECREF(py_funcname);
-    return py_code;
-}
-#endif
-
-/* WriteUnraisableException */
-static void __Pyx_WriteUnraisable(const char *name, CYTHON_UNUSED int clineno,
-                                  CYTHON_UNUSED int lineno, CYTHON_UNUSED const char *filename,
-                                  int full_traceback, CYTHON_UNUSED int nogil) {
-    PyObject *old_exc, *old_val, *old_tb;
-    PyObject *ctx;
-    __Pyx_PyThreadState_declare
-#ifdef WITH_THREAD
-    PyGILState_STATE state;
-    if (nogil)
-        state = PyGILState_Ensure();
-#ifdef _MSC_VER
-    else state = (PyGILState_STATE)-1;
-#endif
-#endif
-    __Pyx_PyThreadState_assign
-    __Pyx_ErrFetch(&old_exc, &old_val, &old_tb);
-    if (full_traceback) {
-        Py_XINCREF(old_exc);
-        Py_XINCREF(old_val);
-        Py_XINCREF(old_tb);
-        __Pyx_ErrRestore(old_exc, old_val, old_tb);
-        PyErr_PrintEx(1);
-    }
-    #if PY_MAJOR_VERSION < 3
-    ctx = PyString_FromString(name);
-    #else
-    ctx = PyUnicode_FromString(name);
-    #endif
-    __Pyx_ErrRestore(old_exc, old_val, old_tb);
-    if (!ctx) {
-        PyErr_WriteUnraisable(Py_None);
-    } else {
-        PyErr_WriteUnraisable(ctx);
-        Py_DECREF(ctx);
-    }
-#ifdef WITH_THREAD
-    if (nogil)
-        PyGILState_Release(state);
-#endif
 }
 
 /* PyFunctionFastCall */
@@ -5466,6 +4991,72 @@ static CYTHON_INLINE PyObject* __Pyx_PyObject_Call(PyObject *func, PyObject *arg
     return result;
 }
 #endif
+
+/* PyErrFetchRestore */
+#if CYTHON_FAST_THREAD_STATE
+static CYTHON_INLINE void __Pyx_ErrRestoreInState(PyThreadState *tstate, PyObject *type, PyObject *value, PyObject *tb) {
+    PyObject *tmp_type, *tmp_value, *tmp_tb;
+    tmp_type = tstate->curexc_type;
+    tmp_value = tstate->curexc_value;
+    tmp_tb = tstate->curexc_traceback;
+    tstate->curexc_type = type;
+    tstate->curexc_value = value;
+    tstate->curexc_traceback = tb;
+    Py_XDECREF(tmp_type);
+    Py_XDECREF(tmp_value);
+    Py_XDECREF(tmp_tb);
+}
+static CYTHON_INLINE void __Pyx_ErrFetchInState(PyThreadState *tstate, PyObject **type, PyObject **value, PyObject **tb) {
+    *type = tstate->curexc_type;
+    *value = tstate->curexc_value;
+    *tb = tstate->curexc_traceback;
+    tstate->curexc_type = 0;
+    tstate->curexc_value = 0;
+    tstate->curexc_traceback = 0;
+}
+#endif
+
+/* WriteUnraisableException */
+static void __Pyx_WriteUnraisable(const char *name, CYTHON_UNUSED int clineno,
+                                  CYTHON_UNUSED int lineno, CYTHON_UNUSED const char *filename,
+                                  int full_traceback, CYTHON_UNUSED int nogil) {
+    PyObject *old_exc, *old_val, *old_tb;
+    PyObject *ctx;
+    __Pyx_PyThreadState_declare
+#ifdef WITH_THREAD
+    PyGILState_STATE state;
+    if (nogil)
+        state = PyGILState_Ensure();
+#ifdef _MSC_VER
+    else state = (PyGILState_STATE)-1;
+#endif
+#endif
+    __Pyx_PyThreadState_assign
+    __Pyx_ErrFetch(&old_exc, &old_val, &old_tb);
+    if (full_traceback) {
+        Py_XINCREF(old_exc);
+        Py_XINCREF(old_val);
+        Py_XINCREF(old_tb);
+        __Pyx_ErrRestore(old_exc, old_val, old_tb);
+        PyErr_PrintEx(1);
+    }
+    #if PY_MAJOR_VERSION < 3
+    ctx = PyString_FromString(name);
+    #else
+    ctx = PyUnicode_FromString(name);
+    #endif
+    __Pyx_ErrRestore(old_exc, old_val, old_tb);
+    if (!ctx) {
+        PyErr_WriteUnraisable(Py_None);
+    } else {
+        PyErr_WriteUnraisable(ctx);
+        Py_DECREF(ctx);
+    }
+#ifdef WITH_THREAD
+    if (nogil)
+        PyGILState_Release(state);
+#endif
+}
 
 /* RaiseDoubleKeywords */
 static void __Pyx_RaiseDoubleKeywordsError(

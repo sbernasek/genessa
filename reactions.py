@@ -78,6 +78,7 @@ class Reaction:
         self.active_species = np.where(self.propensity != 0)[0]
         self.active_inputs = np.where(self.input_dependence != 0)[0]
         self.num_active_species = self.active_species.size
+        self.num_active_inputs = self.active_inputs.size
 
         # predefine active species mask
         self._propensity = self.propensity[self.active_species]
@@ -325,8 +326,13 @@ class EnzymaticReaction:
 
         # identify participating substrates
         self.active_substrates = np.where(self.propensity != 0)[0]
-        self._propensity = self.propensity[self.active_substrates]
         self.active_inputs = np.where(np.logical_or(self.input_dependence != 0, self.rate_modifier != 0))[0]
+
+        # predefine active species mask
+        self.num_active_substrates = self.active_substrates.size
+        self.num_active_inputs = self.active_inputs.size
+        self._propensity = self.propensity[self.active_substrates]
+        self._input_dependence = self.input_dependence[self.active_inputs]
 
         # assign reaction rate sensitivities
         self.temperature_sensitive = temperature_sensitive
@@ -489,8 +495,13 @@ class EnzymaticRepressor:
 
         # determine active substrates
         self.active_substrates = np.where(self.propensity != 0)[0]
-        self._propensity = self.propensity[self.active_substrates]
         self.active_inputs = np.where(self.input_dependence != 0)[0]
+
+        # predefine active species mask
+        self.num_active_substrates = self.active_substrates.size
+        self.num_active_inputs = self.active_inputs.size
+        self._propensity = self.propensity[self.active_substrates]
+        self._input_dependence = self.input_dependence[self.active_inputs]
 
     def shift(self, shift):
         """ Expand dimensionality of reaction. """
@@ -680,6 +691,7 @@ class Coupling:
         # identify participating substrates
         self.active_species = np.where(self.propensity != 0)[0]
         self._propensity = self.propensity[self.active_species]
+        self.num_active_species = self.active_species.size
 
         # assign reaction rate sensitivities
         self.temperature_sensitive = True
