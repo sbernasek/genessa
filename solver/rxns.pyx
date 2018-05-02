@@ -618,45 +618,51 @@ cdef class cHill(cIDRepressor):
         return rate
 
 
-
-
-
 cdef class cCoupling(cSpeciesDependent):
     def __init__(self,
                  int M,
                  double[:] k,
-                 double[:] a,
-                 double[:] w,
+                 double[:] weight,
 
                  long[:] species_ind,
                  long[:] species,
                  double[:] species_dependence,
 
                  cSDRepressor repressor_obj,
-                 long[:] repressors_ind):
+                 long[:] repressors_ind,
+
+                 dict rxn_map):
 
         # add input/species dependence
         cSpeciesDependent.__init__(self, M, k, species_ind, species, species_dependence)
-        self.a = array('d', a)
-        self.w = array('d', w)
+
+        N = np.array(self.n_active_species)
+        self.k = array('d', k)
+        self.weight = array('d', weight)
 
         # add repressor data
         self.rep_obj = repressor_obj
         self.repressors_ind = array('l', repressors_ind)
         self.n_repressors = array('l', np.diff(repressors_ind).astype(int))
 
+        # add edge data
+        self.rxn_map = cRxnMap(rxn_map)
+        self.edges = array('l', np.zeros(len(species), dtype=np.int64))
+        self.edge_to_rxn = array('l', np.repeat(np.arange(M), self.n_active_species).astype(np.int64))
+        self.activity = array('l', np.zeros(M, dtype=np.int64))
+
     @staticmethod
     cdef cCoupling get_blank_cCoupling():
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.int64)
         cdef cSDRepressor rep = cSDRepressor.get_blank_cSDRepressor()
-        return cCoupling(0, xf, xf, xf, xl, xl, xf, rep, xl)
+        return cCoupling(0, xf, xf, xl, xl, xf, rep, xl, {})
 
     @staticmethod
-    cdef cCoupling from_list(list rxns, dict repressor_map):
+    cdef cCoupling from_list(list rxns, dict edge_map, dict repressor_map):
         """ Instantiate from list of reactions. """
         cdef int M
-        cdef np.ndarray k, a, w
+        cdef np.ndarray k, a, w, N, weight
         cdef np.ndarray species_ind, species, species_dependence
         cdef cSDRepressor repressor_obj
         cdef np.ndarray repressors_ind
@@ -666,27 +672,24 @@ cdef class cCoupling(cSpeciesDependent):
         if M == 0:
             return cCoupling.get_blank_cCoupling()
 
-        # get parameters
-        k = np.array([rxn.k[0] for rxn in rxns], dtype=np.float64)
-        a = np.array([rxn.a for rxn in rxns], dtype=np.float64)
-        w = np.array([rxn.w for rxn in rxns], dtype=np.float64)
-
         # add species dependence
         species_ind = np.cumsum([0]+[rxn.num_active_species for rxn in rxns])
         species = np.hstack([rxn.active_species for rxn in rxns])
         species_dependence = np.hstack([rxn._propensity for rxn in rxns])
         species_dependence = species_dependence.astype(np.float64)
 
+        # get parameters
+        k = np.array([rxn.k[0] for rxn in rxns], dtype=np.float64)
+        a = np.array([rxn.a for rxn in rxns], dtype=np.float64)
+        w = np.array([rxn.w for rxn in rxns], dtype=np.float64)
+        N = np.diff(species_ind).astype(int)
+        weight = (a*w/(1+w*(N-1)))
+
         # add repressors
         repressor_obj = cSDRepressor.from_list(rxns, repressor_map)
         repressors_ind = np.cumsum([0]+[len(rxn.repressors) for rxn in rxns])
 
-        return cCoupling(M, k, a, w, species_ind, species, species_dependence, repressor_obj, repressors_ind)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef double get_species_activity(self, int rxn, array states) nogil:
-        return self.get_species_activity_sum(rxn, states)
+        return cCoupling(M, k, weight, species_ind, species, species_dependence, repressor_obj, repressors_ind, edge_map)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -701,7 +704,6 @@ cdef class cCoupling(cSpeciesDependent):
 
         # integrate repressor occupancies (multiplicative)
         for count in xrange(num_repressors):
-            #occupancy = self.rep_obj.get_occupancy(index, states)
             occupancy = self.rep_obj.occupancies.data.as_doubles[index]
             availability *= (1-occupancy)
             index += 1
@@ -712,20 +714,15 @@ cdef class cCoupling(cSpeciesDependent):
     @cython.wraparound(False)
     cdef double update(self, int rxn, array states) nogil:
         """ Update rate of specified reaction. """
-        cdef double coupling
-        cdef int N
-        cdef double vmax, n, k_m
+        cdef double activity
+        cdef double k, weight
         cdef double rate
 
-        # compute species activities
-        coupling = self.get_species_activity(rxn, states)
-
         # compute rate
-        N = self.n_active_species.data.as_longs[rxn]
+        activity = self.activity.data.as_longs[rxn]
         k = self.k.data.as_doubles[rxn]
-        a = self.a.data.as_doubles[rxn]
-        w = self.w.data.as_doubles[rxn]
-        rate = k + ((a*w/(1+w*(N-1)))*coupling)
+        weight = self.weight.data.as_doubles[rxn]
+        rate = k + weight*activity
 
         # update and apply repressors
         rate *= self.get_availability(rxn, states)
@@ -736,6 +733,152 @@ cdef class cCoupling(cSpeciesDependent):
 
         #self.rates.data.as_doubles[rxn] = rate
         return rate
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef void update_activity(self, int edge, array states) nogil:
+
+        """ Get occupancy by specified repressor. """
+        cdef int weight
+        cdef int state_ind, state
+        cdef int old_edge = self.edges.data.as_longs[edge]
+        cdef int new_edge, activity, rxn
+
+        # get new edge value
+        weight = <int>self.species_dependence.data.as_doubles[edge]
+        state_ind = self.species.data.as_longs[edge]
+        new_edge = weight * states.data.as_longs[state_ind]
+
+        # update rxn activity
+        rxn = self.edge_to_rxn.data.as_longs[edge]
+        activity = self.activity.data.as_longs[rxn]
+        self.activity.data.as_longs[rxn] = activity + (new_edge - old_edge)
+
+        # update edge
+        self.edges.data.as_longs[edge] = new_edge
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef void update_activities(self, array states, int fired) nogil:
+        """ Update occupancies for repressors that have changed. """
+        self.rxn_map.app_coup(self, fired, self.update_activity, states)
+
+
+# cdef class cCoupling(cSpeciesDependent):
+#     def __init__(self,
+#                  int M,
+#                  double[:] k,
+#                  double[:] a,
+#                  double[:] w,
+
+#                  long[:] species_ind,
+#                  long[:] species,
+#                  double[:] species_dependence,
+
+#                  cSDRepressor repressor_obj,
+#                  long[:] repressors_ind):
+
+#         # add input/species dependence
+#         cSpeciesDependent.__init__(self, M, k, species_ind, species, species_dependence)
+#         self.a = array('d', a)
+#         self.w = array('d', w)
+
+#         # add repressor data
+#         self.rep_obj = repressor_obj
+#         self.repressors_ind = array('l', repressors_ind)
+#         self.n_repressors = array('l', np.diff(repressors_ind).astype(int))
+
+#     @staticmethod
+#     cdef cCoupling get_blank_cCoupling():
+#         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
+#         cdef np.ndarray xl = np.zeros(1, dtype=np.int64)
+#         cdef cSDRepressor rep = cSDRepressor.get_blank_cSDRepressor()
+#         return cCoupling(0, xf, xf, xf, xl, xl, xf, rep, xl)
+
+#     @staticmethod
+#     cdef cCoupling from_list(list rxns, dict repressor_map):
+#         """ Instantiate from list of reactions. """
+#         cdef int M
+#         cdef np.ndarray k, a, w
+#         cdef np.ndarray species_ind, species, species_dependence
+#         cdef cSDRepressor repressor_obj
+#         cdef np.ndarray repressors_ind
+
+#         # if no reactions of this type, add blank
+#         M = len(rxns)
+#         if M == 0:
+#             return cCoupling.get_blank_cCoupling()
+
+#         # get parameters
+#         k = np.array([rxn.k[0] for rxn in rxns], dtype=np.float64)
+#         a = np.array([rxn.a for rxn in rxns], dtype=np.float64)
+#         w = np.array([rxn.w for rxn in rxns], dtype=np.float64)
+
+#         # add species dependence
+#         species_ind = np.cumsum([0]+[rxn.num_active_species for rxn in rxns])
+#         species = np.hstack([rxn.active_species for rxn in rxns])
+#         species_dependence = np.hstack([rxn._propensity for rxn in rxns])
+#         species_dependence = species_dependence.astype(np.float64)
+
+#         # add repressors
+#         repressor_obj = cSDRepressor.from_list(rxns, repressor_map)
+#         repressors_ind = np.cumsum([0]+[len(rxn.repressors) for rxn in rxns])
+
+#         return cCoupling(M, k, a, w, species_ind, species, species_dependence, repressor_obj, repressors_ind)
+
+#     @cython.boundscheck(False)
+#     @cython.wraparound(False)
+#     cdef double get_species_activity(self, int rxn, array states) nogil:
+#         return self.get_species_activity_sum(rxn, states)
+
+#     @cython.boundscheck(False)
+#     @cython.wraparound(False)
+#     cdef double get_availability(self, int rxn, array states) nogil:
+#         """ Integrate all repressor activity to determine availability. """
+
+#         cdef int count
+#         cdef double occupancy
+#         cdef double availability = 1
+#         cdef int index = self.repressors_ind.data.as_longs[rxn]
+#         cdef int num_repressors = self.n_repressors.data.as_longs[rxn]
+
+#         # integrate repressor occupancies (multiplicative)
+#         for count in xrange(num_repressors):
+#             #occupancy = self.rep_obj.get_occupancy(index, states)
+#             occupancy = self.rep_obj.occupancies.data.as_doubles[index]
+#             availability *= (1-occupancy)
+#             index += 1
+
+#         return availability
+
+#     @cython.boundscheck(False)
+#     @cython.wraparound(False)
+#     cdef double update(self, int rxn, array states) nogil:
+#         """ Update rate of specified reaction. """
+#         cdef double coupling
+#         cdef int N
+#         cdef double k, a, w
+#         cdef double rate
+
+#         # compute species activities
+#         coupling = self.get_species_activity(rxn, states)
+
+#         # compute rate
+#         N = self.n_active_species.data.as_longs[rxn]
+#         k = self.k.data.as_doubles[rxn]
+#         a = self.a.data.as_doubles[rxn]
+#         w = self.w.data.as_doubles[rxn]
+#         rate = k + ((a*w/(1+w*(N-1)))*coupling)
+
+#         # update and apply repressors
+#         rate *= self.get_availability(rxn, states)
+
+#         # update rate
+#         if rate < 0:
+#             rate = 0
+
+#         #self.rates.data.as_doubles[rxn] = rate
+#         return rate
 
 
 cdef class cRxnMap:
@@ -777,6 +920,19 @@ cdef class cRxnMap:
         for count in xrange(length):
             rep = self.values.data.as_longs[index]
             f(rep_obj, rep, states)
+            index += 1
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef void app_coup(self, cCoupling coupling_obj, int key, cSetEdge f,
+                  array states) nogil:
+        cdef int count, edge
+        cdef int length = self.lengths.data.as_longs[key]
+        cdef int index = self.ind.data.as_longs[key]
+
+        for count in xrange(length):
+            edge = self.values.data.as_longs[index]
+            f(coupling_obj, edge, states)
             index += 1
 
 
@@ -871,8 +1027,9 @@ cdef class cRateFunction:
     @cython.wraparound(False)
     cdef void update(self, array states, array inputs, array cumul, int fired) nogil:
         """ Update rates for species-dependent reactions that have changed. """
-        self.rxn_map.app(self, fired, self.set_rate, states, inputs, cumul)
+        self.coupling.update_activities(states, fired)
         self.coupling.rep_obj.update(states, fired)
+        self.rxn_map.app(self, fired, self.set_rate, states, inputs, cumul)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -880,8 +1037,9 @@ cdef class cRateFunction:
         """ Update all reaction rates. """
         cdef int rxn
         for rxn in xrange(self.M):
-            self.set_rate(rxn, states, inputs, cumul)
+            self.coupling.update_activities(states, rxn)
             self.coupling.rep_obj.update(states, rxn)
+            self.set_rate(rxn, states, inputs, cumul)
 
 
 # ==============================END CYTHON=================================== #
@@ -916,18 +1074,21 @@ class RateFunction:
             else:
                 raise ValueError('{} reaction type not recognized.'.format(rxn.__class__.__name__))
 
+        # get edge map
+        edge_map = self.get_rxn_map(cell, maptype='edges')
+
         # get repressor map
-        repressor_map = self.get_rxn_map(cell, repressors=True)
+        repressor_map = self.get_rxn_map(cell, maptype='repressors')
 
         # get rate objects
-        coupling = cCoupling.from_list(coupling, repressor_map)
+        coupling = cCoupling.from_list(coupling, edge_map, repressor_map)
         massaction = cMassAction.from_list(massaction)
         hill = cHill.from_list(hill)
         icontrol = cIController.from_list(icontrol)
         pcontrol = cPController.from_list(pcontrol)
 
         # get reaction map
-        rxn_map = self.get_rxn_map(cell, repressors=False)
+        rxn_map = self.get_rxn_map(cell, maptype='propensity')
         input_map = self.get_input_map(cell)
 
 
@@ -961,6 +1122,17 @@ class RateFunction:
         return adict
 
     @staticmethod
+    def get_edge_dict(network):
+        """ Returns dictionary where keys are states and values are lists of  repressor indices whose occupancies depend upon each state. """
+        adict = {i: [] for i in range(network.nodes.size)}
+        dependents = np.hstack([rxn.active_species for rxn in network.reactions if rxn.__class__.__name__=='Coupling'])
+
+        # store index of edge whose activity depends on state
+        for edge, state in enumerate(dependents):
+            adict[state].append(edge)
+        return adict
+
+    @staticmethod
     def get_propensity_dict(network):
         """ Returns dictionary where keys are states and values are lists of  reaction indices whose propensities depend upon each state. """
         adict = {i: [] for i in range(network.nodes.size)}
@@ -980,12 +1152,14 @@ class RateFunction:
         return adict
 
     @classmethod
-    def get_rxn_map(cls, network, repressors=False):
+    def get_rxn_map(cls, network, maptype='propensity'):
 
-        if repressors:
-            p_dict = cls.get_repressor_dependence_dict(network)
-        else:
+        if maptype == 'propensity':
             p_dict = cls.get_propensity_dict(network)
+        elif maptype == 'repressors':
+            p_dict = cls.get_repressor_dependence_dict(network)
+        elif maptype == 'edges':
+            p_dict = cls.get_edge_dict(network)
 
         adict = {i: [] for i in range(len(network.reactions))}
         for (i, rxn) in enumerate(network.reactions):

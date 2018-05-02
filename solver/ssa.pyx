@@ -424,13 +424,13 @@ cdef int choose_rxn_sorted(array order, array rates, int num_rxns, double total_
     cdef int index
 
     # NOTE: if random number is high and last reaction puts rate over total, the r<=0 comparison is never activated and the index isn't incremented by the subsequent loop. solution is to correct index following the comparison
-    r = rand()/(RAND_MAX*1.0)
+    r = total_rate*rand()/(RAND_MAX*1.0)
     for index in xrange(num_rxns):
         rate = rates.data.as_doubles[order.data.as_longs[index]]
         if r <= 0:
             index -= 1
             break
-        r -= rate / total_rate
+        r -= rate
     return order.data.as_longs[index]
 
 cdef double float_sum(np.ndarray[np.float_t, ndim=1] vals):

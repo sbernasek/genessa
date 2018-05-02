@@ -97,28 +97,51 @@ cdef class cHill(cIDRepressor):
 
 
 cdef class cCoupling(cSpeciesDependent):
-    cdef array a, w
+    cdef array weight
     cdef cSDRepressor rep_obj
     cdef array repressors_ind, n_repressors
+    cdef array edges, edge_to_rxn
+    cdef cRxnMap rxn_map
+    cdef array activity
 
     # methods
     @staticmethod
     cdef cCoupling get_blank_cCoupling()
     @staticmethod
-    cdef cCoupling from_list(list rxns, dict repressor_map)
-    cdef double get_species_activity(self, int rxn, array states) nogil
+    cdef cCoupling from_list(list rxns, dict edge_map, dict repressor_map)
     cdef double get_availability(self, int rxn, array states) nogil
+    cdef void update_activity(self, int edge, array states) nogil
+    cdef void update_activities(self, array states, int fired) nogil
     cdef double update(self, int rxn, array states) nogil
+
+
+# cdef class cCoupling(cSpeciesDependent):
+#     cdef array a, w
+#     cdef cSDRepressor rep_obj
+#     cdef array repressors_ind, n_repressors
+
+#     # methods
+#     @staticmethod
+#     cdef cCoupling get_blank_cCoupling()
+#     @staticmethod
+#     cdef cCoupling from_list(list rxns, dict repressor_map)
+#     cdef double get_species_activity(self, int rxn, array states) nogil
+#     cdef double get_availability(self, int rxn, array states) nogil
+#     cdef double update(self, int rxn, array states) nogil
 
 
 ctypedef void (*cSetRate)(cRateFunction, int, array, array, array) nogil
 ctypedef void (*cSetOccupancy)(cSDRepressor, int, array) nogil
+ctypedef void (*cSetEdge)(cCoupling, int, array) nogil
+
 cdef class cRxnMap:
     cdef array ind, lengths, values
 
     # methods
     cdef void app(self, cRateFunction rf, int key, cSetRate f, array states, array inputs, array cumul) nogil
     cdef void app_rep(self, cSDRepressor rep_obj, int key, cSetOccupancy f,
+                  array states) nogil
+    cdef void app_coup(self, cCoupling coupling_obj, int key, cSetEdge f,
                   array states) nogil
 
 
