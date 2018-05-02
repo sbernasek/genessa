@@ -12,7 +12,7 @@ cdef class cSpeciesDependent:
     # methods
     cdef double get_rate(self, int rxn) nogil
     cdef double get_species_activity(self, int rxn, array states) nogil
-    cdef int get_species_activity_product(self, int rxn, array states) nogil
+    cdef double get_species_activity_product(self, int rxn, array states) nogil
     cdef double get_species_activity_sum(self, int rxn, array states) nogil
 
 
@@ -55,14 +55,17 @@ cdef class cMassAction(cInputDependent):
 
 cdef class cSDRepressor(cSpeciesDependent):
     cdef array k_m, n
+    cdef cRxnMap rxn_map
+    cdef array occupancies
 
     # methods
     @staticmethod
     cdef cSDRepressor get_blank_cSDRepressor()
     @staticmethod
-    cdef cSDRepressor from_list(list rxns)
+    cdef cSDRepressor from_list(list rxns, dict rxn_map)
     cdef double get_species_activity(self, int rep, array states) nogil
-    cdef double get_occupancy(self, int rep, array states) nogil
+    cdef void set_occupancy(self, int rep, array states) nogil
+    cdef void update(self, array states, int fired) nogil
 
 
 cdef class cIDRepressor(cInputDependent):
@@ -102,18 +105,21 @@ cdef class cCoupling(cSpeciesDependent):
     @staticmethod
     cdef cCoupling get_blank_cCoupling()
     @staticmethod
-    cdef cCoupling from_list(list rxns)
+    cdef cCoupling from_list(list rxns, dict repressor_map)
     cdef double get_species_activity(self, int rxn, array states) nogil
     cdef double get_availability(self, int rxn, array states) nogil
     cdef double update(self, int rxn, array states) nogil
 
 
 ctypedef void (*cSetRate)(cRateFunction, int, array, array, array) nogil
+ctypedef void (*cSetOccupancy)(cSDRepressor, int, array) nogil
 cdef class cRxnMap:
     cdef array ind, lengths, values
 
     # methods
     cdef void app(self, cRateFunction rf, int key, cSetRate f, array states, array inputs, array cumul) nogil
+    cdef void app_rep(self, cSDRepressor rep_obj, int key, cSetOccupancy f,
+                  array states) nogil
 
 
 cdef class cRateFunction:

@@ -40,7 +40,7 @@ cdef class cNetwork:
     @cython.boundscheck(False)
     @cython.wraparound(False)
     cdef array get_rxn_rates(self):
-        return self.rate_function.get_rxn_rates()
+        return self.rate_function.rates
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -181,10 +181,8 @@ cdef class cSolver:
             self.network.update(states, input_value, cumulative, rxn_fired)
 
             # get rates
-            #rxn_rates = self.network.get_rxn_rates()
-            #total_rate = self.network.get_total_rate()
-            rxn_rates = self.network.rate_function.rates
-            total_rate = self.network.rate_function.total_rate
+            rxn_rates = self.network.get_rxn_rates()
+            total_rate = self.network.get_total_rate()
 
             # if total rate is zero, keep stepping until input changes
             if total_rate == 0:
