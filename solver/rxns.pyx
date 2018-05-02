@@ -4,7 +4,7 @@
 """
 TO DO:
 
-1. couple update minor portions of rate on the fly?
+1. convert to unsigned ints/floats?
 
 """
 
@@ -714,24 +714,17 @@ cdef class cCoupling(cSpeciesDependent):
     @cython.wraparound(False)
     cdef double update(self, int rxn, array states) nogil:
         """ Update rate of specified reaction. """
-        cdef double activity
-        cdef double k, weight
+        cdef double coupling_strength
         cdef double rate
 
-        # compute rate
-        activity = self.activity.data.as_longs[rxn]
-        k = self.k.data.as_doubles[rxn]
-        weight = self.weight.data.as_doubles[rxn]
-        rate = k + weight*activity
-
-        # update and apply repressors
-        rate *= self.get_availability(rxn, states)
+        # compute rate and apply repressors
+        coupling_strength = self.activity.data.as_longs[rxn] * self.weight.data.as_doubles[rxn]
+        rate = (self.k.data.as_doubles[rxn] + coupling_strength) * self.get_availability(rxn, states)
 
         # update rate
         if rate < 0:
             rate = 0
 
-        #self.rates.data.as_doubles[rxn] = rate
         return rate
 
     @cython.boundscheck(False)
