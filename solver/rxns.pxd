@@ -10,10 +10,10 @@ cdef class cSpeciesDependent:
     cdef array rates
 
     # methods
-    cdef double get_rate(self, int rxn) nogil
-    cdef double get_species_activity(self, int rxn, array states) nogil
-    cdef double get_species_activity_product(self, int rxn, array states) nogil
-    cdef double get_species_activity_sum(self, int rxn, array states) nogil
+    cdef double get_rate(self, unsigned int rxn) nogil
+    cdef double get_species_activity(self, unsigned int rxn, array states) nogil
+    cdef double get_species_activity_product(self, unsigned int rxn, array states) nogil
+    cdef double get_species_activity_sum(self, unsigned int rxn, array states) nogil
 
 
 cdef class cPController(cSpeciesDependent):
@@ -22,8 +22,8 @@ cdef class cPController(cSpeciesDependent):
     cdef cPController get_blank_cPController()
     @staticmethod
     cdef cPController from_list(list rxns)
-    cdef double get_species_activity(self, int rxn, array states) nogil
-    cdef double update(self, int rxn, array states) nogil
+    cdef double get_species_activity(self, unsigned int rxn, array states) nogil
+    cdef double update(self, unsigned int rxn, array states) nogil
 
 
 cdef class cIController(cPController):
@@ -32,16 +32,16 @@ cdef class cIController(cPController):
     cdef cIController get_blank_cIController()
     @staticmethod
     cdef cIController from_list(list rxns)
-    cdef double get_species_activity_sum(self, int rxn, array cumul) nogil
+    cdef double get_species_activity_sum(self, unsigned int rxn, array cumul) nogil
 
 
 cdef class cInputDependent(cSpeciesDependent):
     cdef array inputs_ind, n_active_inputs, inputs, input_dependence
 
     # methods
-    cdef double get_input_activity(self, int rxn, array inputs) nogil
-    cdef double get_input_activity_product(self, int rxn, array input_values) nogil
-    cdef double get_input_activity_sum(self, int rxn, array input_values) nogil
+    cdef double get_input_activity(self, unsigned int rxn, array inputs) nogil
+    cdef double get_input_activity_product(self, unsigned int rxn, array input_values) nogil
+    cdef double get_input_activity_sum(self, unsigned int rxn, array input_values) nogil
 
 
 cdef class cMassAction(cInputDependent):
@@ -50,7 +50,7 @@ cdef class cMassAction(cInputDependent):
     cdef cMassAction get_blank_cMassAction()
     @staticmethod
     cdef cMassAction from_list(list rxns)
-    cdef double update(self, int rxn, array states, array inputs) nogil
+    cdef double update(self, unsigned int rxn, array states, array inputs) nogil
 
 
 cdef class cSDRepressor(cSpeciesDependent):
@@ -63,9 +63,9 @@ cdef class cSDRepressor(cSpeciesDependent):
     cdef cSDRepressor get_blank_cSDRepressor()
     @staticmethod
     cdef cSDRepressor from_list(list rxns, dict rxn_map)
-    cdef double get_species_activity(self, int rep, array states) nogil
-    cdef void set_occupancy(self, int rep, array states) nogil
-    cdef void update(self, array states, int fired) nogil
+    cdef double get_species_activity(self, unsigned int rep, array states) nogil
+    cdef void set_occupancy(self, unsigned int rep, array states) nogil
+    cdef void update(self, array states, unsigned int fired) nogil
 
 
 cdef class cIDRepressor(cInputDependent):
@@ -76,9 +76,9 @@ cdef class cIDRepressor(cInputDependent):
     cdef cIDRepressor get_blank_cIDRepressor()
     @staticmethod
     cdef cIDRepressor from_list(list rxns)
-    cdef double get_species_activity(self, int rep, array states) nogil
-    cdef double get_input_activity(self, int rep, array inputs) nogil
-    cdef double get_occupancy(self, int rep, array states, array inputs) nogil
+    cdef double get_species_activity(self, unsigned int rep, array states) nogil
+    cdef double get_input_activity(self, unsigned int rep, array inputs) nogil
+    cdef double get_occupancy(self, unsigned int rep, array states, array inputs) nogil
 
 
 cdef class cHill(cIDRepressor):
@@ -90,10 +90,10 @@ cdef class cHill(cIDRepressor):
     cdef cHill get_blank_cHill()
     @staticmethod
     cdef cHill from_list(list rxns)
-    cdef double get_species_activity(self, int rxn, array states) nogil
-    cdef double get_input_activity(self, int rxn, array inputs) nogil
-    cdef double get_availability(self, int rxn, array states, array inputs)nogil
-    cdef double update(self, int rxn, array states, array inputs) nogil
+    cdef double get_species_activity(self, unsigned int rxn, array states) nogil
+    cdef double get_input_activity(self, unsigned int rxn, array inputs) nogil
+    cdef double get_availability(self, unsigned int rxn, array states, array inputs)nogil
+    cdef double update(self, unsigned int rxn, array states, array inputs) nogil
 
 
 cdef class cCoupling(cSpeciesDependent):
@@ -109,39 +109,25 @@ cdef class cCoupling(cSpeciesDependent):
     cdef cCoupling get_blank_cCoupling()
     @staticmethod
     cdef cCoupling from_list(list rxns, dict edge_map, dict repressor_map)
-    cdef double get_availability(self, int rxn, array states) nogil
-    cdef void update_activity(self, int edge, array states) nogil
-    cdef void update_activities(self, array states, int fired) nogil
-    cdef double update(self, int rxn, array states) nogil
+    cdef double get_availability(self, unsigned int rxn, array states) nogil
+    cdef void update_activity(self, unsigned int edge, array states) nogil
+    cdef void update_activities(self, array states, unsigned int fired) nogil
+    cdef double update(self, unsigned int rxn, array states) nogil
 
 
-# cdef class cCoupling(cSpeciesDependent):
-#     cdef array a, w
-#     cdef cSDRepressor rep_obj
-#     cdef array repressors_ind, n_repressors
 
-#     # methods
-#     @staticmethod
-#     cdef cCoupling get_blank_cCoupling()
-#     @staticmethod
-#     cdef cCoupling from_list(list rxns, dict repressor_map)
-#     cdef double get_species_activity(self, int rxn, array states) nogil
-#     cdef double get_availability(self, int rxn, array states) nogil
-#     cdef double update(self, int rxn, array states) nogil
-
-
-ctypedef void (*cSetRate)(cRateFunction, int, array, array, array) nogil
-ctypedef void (*cSetOccupancy)(cSDRepressor, int, array) nogil
-ctypedef void (*cSetEdge)(cCoupling, int, array) nogil
+ctypedef void (*cSetRate)(cRateFunction, unsigned int, array, array, array) nogil
+ctypedef void (*cSetOccupancy)(cSDRepressor, unsigned int, array) nogil
+ctypedef void (*cSetEdge)(cCoupling, unsigned int, array) nogil
 
 cdef class cRxnMap:
     cdef array ind, lengths, values
 
     # methods
-    cdef void app(self, cRateFunction rf, int key, cSetRate f, array states, array inputs, array cumul) nogil
-    cdef void app_rep(self, cSDRepressor rep_obj, int key, cSetOccupancy f,
+    cdef void app(self, cRateFunction rf, unsigned int key, cSetRate f, array states, array inputs, array cumul) nogil
+    cdef void app_rep(self, cSDRepressor rep_obj, unsigned int key, cSetOccupancy f,
                   array states) nogil
-    cdef void app_coup(self, cCoupling coupling_obj, int key, cSetEdge f,
+    cdef void app_coup(self, cCoupling coupling_obj, unsigned int key, cSetEdge f,
                   array states) nogil
 
 
@@ -151,16 +137,16 @@ cdef class cRateFunction:
     cdef cHill hill
     cdef cIController icontrol
     cdef cPController pcontrol
-    cdef int M
+    cdef unsigned int M
     cdef array rxn_types, rxn_keys, rates
     cdef double total_rate
     cdef cRxnMap rxn_map, input_map
 
     # methods
     cdef array get_rxn_rates(self)
-    cdef double evaluate(self, int rxn, array states, array inputs, array cumul) nogil
-    cdef void set_rate(self, int rxn, array states, array inputs, array cumul) nogil
-    cdef void update_input(self, array states, array inputs, array cumul, int dim) nogil
-    cdef void update(self, array states, array inputs, array cumul, int fired) nogil
+    cdef double evaluate(self, unsigned int rxn, array states, array inputs, array cumul) nogil
+    cdef void set_rate(self, unsigned int rxn, array states, array inputs, array cumul) nogil
+    cdef void update_input(self, array states, array inputs, array cumul, unsigned int dim) nogil
+    cdef void update(self, array states, array inputs, array cumul, unsigned int fired) nogil
     cdef void update_all(self, array states, array inputs, array cumul) nogil
 

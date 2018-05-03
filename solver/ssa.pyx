@@ -18,15 +18,15 @@ from copy import deepcopy
 
 
 cdef class cNetwork:
-    cdef int N, M, I # network has N nodes, M reactions, I inputs
+    cdef unsigned int N, M, I # network has N nodes, M reactions, I inputs
     cdef array stoichiometry
     cdef long[:] min_coeff_per_rxn
     cdef long[:] reactant_species
-    cdef int num_reactant_species
+    cdef unsigned int num_reactant_species
     cdef cRateFunction rate_function
-    cdef dict stoich
+    cdef cStoichiometry stoich
 
-    def __init__(self, int N, int M, int I, array stoichiometry, long[:] min_coeff_per_rxn, long[:] reactant_species, int num_reactant_species, cRateFunction rate_function, dict stoich_dict):
+    def __init__(self, unsigned int N, unsigned int M, unsigned int I, array stoichiometry, long[:] min_coeff_per_rxn, long[:] reactant_species, int num_reactant_species, cRateFunction rate_function, cStoichiometry stoich):
         self.N = N
         self.M = M
         self.I = I
@@ -35,7 +35,7 @@ cdef class cNetwork:
         self.reactant_species = reactant_species
         self.num_reactant_species = num_reactant_species
         self.rate_function = rate_function
-        self.stoich = stoich_dict
+        self.stoich = stoich
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -54,19 +54,18 @@ cdef class cNetwork:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef void update_input(self, array states, array input_value, array cumulative, int dim) nogil:
+    cdef void update_input(self, array states, array input_value, array cumulative, unsigned int dim) nogil:
         self.rate_function.update_input(states, input_value, cumulative, dim)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef void update(self, array states, array input_value, array cumulative, int rxn_fired) nogil:
+    cdef void update(self, array states, array input_value, array cumulative, unsigned int rxn_fired) nogil:
         self.rate_function.update(states, input_value, cumulative, rxn_fired)
 
 
 cdef class cSolver:
     cdef cNetwork network
     cdef object rng
-    cdef array mzeros
     cdef array int_template
     cdef array float_template
 
@@ -79,15 +78,14 @@ cdef class cSolver:
         self.rng = cyRNG(100)
 
         # create zeros template for extents
-        self.mzeros = array('l', np.zeros(self.network.M, dtype=np.int64))
         self.int_template = array('l', np.zeros(self.network.N, dtype=np.int64))
         self.float_template = array('d', np.zeros(self.network.N, dtype=np.float64))
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cpdef ssa(self, long[::1] ic, cSignal input_function,
+    cpdef ssa(self, unsigned int[::1] ic, cSignal input_function,
                 double[::1] integrator_ic,
-                double dt=1., double duration=100, int integrate=0):
+                double dt=1., double duration=100, bint integrate=0):
         """ Python interface for SSA. """
         cdef np.ndarray times = np.arange(0, duration, dt)
         cdef np.ndarray states
@@ -96,9 +94,9 @@ cdef class cSolver:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef np.ndarray c_ssa(self, long[::1] ic, cSignal input_function,
+    cdef np.ndarray c_ssa(self, unsigned int[::1] ic, cSignal input_function,
                 double[::1] integrator_ic,
-                double dt=1., double duration=100, int integrate=0):
+                double dt=1., double duration=100, bint integrate=0):
         """
         Run gillespie ssa solver.
 
@@ -116,20 +114,20 @@ cdef class cSolver:
 
         # initialize times and state lists, simulation counters
         cdef double t = 0.
-        cdef array states = array('l', ic)
+        cdef array states = array('I', ic)
         cdef array cumulative = array('d', integrator_ic)
 
         # for input checking loop
-        cdef int index
+        cdef unsigned int index
         cdef bint input_changed
 
         # simulation history
         #cdef array times_regular = array('d', np.arange(0, duration, dt))
         cdef long num_timepoints = <long>ceil(duration/dt)
-        cdef array states_regular = array('l', np.empty((self.network.N, num_timepoints), dtype=np.int64).flatten())
+        cdef array states_regular = array('I', np.empty((self.network.N, num_timepoints), dtype=np.uint32).flatten())
         cdef double threshold = 0.
-        cdef int t_index = 0
-        cdef int s_index
+        cdef unsigned int t_index = 0
+        cdef unsigned int s_index
         cdef np.ndarray trajectories
 
         # initialize input
@@ -145,13 +143,16 @@ cdef class cSolver:
         cdef array rxn_rates
         cdef array rxn_order
         cdef double total_rate
-        cdef int rxn_fired = 0
+        cdef unsigned int rxn_fired = 0
         cdef double tau
+
+        # initialize random number
+        cdef double rfloat
 
         # initialize all rates and sort order
         self.network.update_all(states, input_value, cumulative)
         rxn_rates = self.network.get_rxn_rates()
-        rxn_order = array('l', np.argsort(rxn_rates)[::-1])
+        rxn_order = array('I', np.argsort(rxn_rates).astype(np.uint32)[::-1])
 
         # ================================================================
         # BEGIN SIMULATION
@@ -161,15 +162,15 @@ cdef class cSolver:
             # update stored state values
             while t >= threshold:
                 for s_index in xrange(self.network.N):
-                    states_regular.data.as_longs[s_index*num_timepoints+t_index] = states.data.as_longs[s_index]
+                    states_regular.data.as_uints[s_index*num_timepoints+t_index] = states.data.as_uints[s_index]
                 threshold += dt
                 t_index += 1
-                rxn_order = array('l', np.argsort(rxn_rates)[::-1])
+                rxn_order = array('I', np.argsort(rxn_rates).astype(np.uint32)[::-1])
 
             if null_input == 0:
 
                 # compute input value
-                new_input_value = self.get_input_value(input_function, t)
+                new_input_value = input_function.get_signal(t)
 
                 # check if input changed and input rates accordingly
                 for index in xrange(self.network.I):
@@ -209,10 +210,12 @@ cdef class cSolver:
                             t += dt
                     continue
 
-            # choose and fire a reaction
-            tau = get_timestep(total_rate)
-            #rxn_fired = self._choose_rxn(rxn_rates, total_rate)
-            rxn_fired = self.choose_rxn(rxn_order, rxn_rates, total_rate)
+            # choose a reaction
+            rfloat = rand()/(RAND_MAX*1.0)
+            tau = get_timestep(total_rate, rfloat)
+            rxn_fired = choose_rxn(rxn_order, rxn_rates, self.network.M, total_rate, rfloat)
+
+            # fire reaction
             self.fire_reaction(rxn_fired, 1, states)
 
             # update times and states (TODO: only update those that changed)
@@ -227,32 +230,20 @@ cdef class cSolver:
         # interpolate any skipped values
         while threshold < duration:
             for s_index in xrange(self.network.N):
-                states_regular.data.as_longs[s_index*num_timepoints+t_index] = states.data.as_longs[s_index]
+                states_regular.data.as_uints[s_index*num_timepoints+t_index] = states.data.as_uints[s_index]
             threshold += dt
             t_index += 1
 
         #return numpy arrays
-        trajectories = np.frombuffer(states_regular, dtype=np.int64).reshape(self.network.N, num_timepoints)
-        #times = np.frombuffer(times_regular, dtype=np.float64)
+        trajectories = np.frombuffer(states_regular, dtype=np.uint32).reshape(self.network.N, num_timepoints)
 
         return trajectories
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef double get_total_rate(self, array rxn_rates):
-        return cython_sum.sum_double_arr(rxn_rates, self.network.M)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef int _choose_rxn(self, array rxn_rates, double total_rate):
-        """ Probabalistically select a single reaction given rates. """
-        return choose_rxn(rxn_rates, self.network.M, total_rate)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef int choose_rxn(self, array order, array rxn_rates, double total_rate):
+    cdef unsigned int choose_rxn(self, array order, array rxn_rates, double total_rate, double rfloat) nogil:
         """ Select reaction from given pre-sorted rates (faster). """
-        return choose_rxn_sorted(order, rxn_rates, self.network.M, total_rate)
+        return choose_rxn(order, rxn_rates, self.network.M, total_rate, rfloat)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -261,214 +252,72 @@ cdef class cSolver:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef int choose_critical_rxn(self, array rates, array critical):
-        """ Choose a single critical reaction to be fired. """
-        cdef array critical_rates = copyarray(rates)
-        cdef int i
-        cdef int rxn
-        cdef double total_rate
-
-        # if reaction is not critical, zero its rate
-        for i in xrange(self.network.M):
-            if critical.data.as_longs[i] == 0:
-                critical_rates.data.as_doubles[i] = 0.
-
-        total_rate = cython_sum.sum_double_arr(critical_rates, self.network.M)
-        if total_rate > 0.:
-            rxn = choose_rxn(critical_rates, self.network.M, total_rate)
-
-        return rxn
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef fire_reaction(self, int rxn, int extent, array states):
-        cdef int i
+    cdef void fire_reaction(self, unsigned int rxn, unsigned int extent, array states) nogil:
+        cdef unsigned int N = self.network.stoich.lengths.data.as_uints[rxn]
+        cdef unsigned int index = self.network.stoich.index.data.as_uints[rxn]
+        cdef unsigned int count, species
         cdef int coefficient
-        for i, coefficient in self.network.stoich[rxn].items():
-            states.data.as_longs[i] += (coefficient * extent)
+
+        # update each state
+        for count in xrange(N):
+            species = self.network.stoich.species.data.as_uints[index]
+            coefficient = self.network.stoich.coefficients.data.as_longs[index]
+            states.data.as_uints[species] += (coefficient * extent)
+            index += 1
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef update_cumulative(self, array states, array cumulative, double tau):
-        cdef int i
+    cdef void update_cumulative(self, array states, array cumulative, double tau) nogil:
+        cdef unsigned int i
         for i in xrange(self.network.N):
-            cumulative.data.as_doubles[i] += (tau * states.data.as_longs[i])
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef fire_noncritical_rxns(self, array rates, array non_critical, double tau, array states):
-        """ Draw extents for noncritical reactions from Poisson dist. """
-        cdef int rxn, extent
-        for rxn in xrange(self.network.M):
-            if non_critical.data.as_longs[rxn] == 1:
-                if rates.data.as_doubles[rxn] != 0:
-                    extent = self.rng.GetPoisson(rates.data.as_doubles[rxn]*tau)
-                    self.fire_reaction(rxn, extent, states)
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef array get_critical_rxns(self, array states):
-        """ Returns boolean vector identifying critical reactions. """
-
-        cdef int i # indes for states
-        cdef int j # index for reactions
-        cdef long stoich_coeff, min_coeff
-        cdef double max_firings
-
-        # preallocate boolean array (as ints) for critical reactions
-        cdef array critical_rxns = clone(self.int_template, self.network.M, zero=1)
-
-        # iterate across states for each reaction, finding the one with the largest
-
-        # iterate across reactions
-        for j in xrange(self.network.M):
-            max_firings_for_rxn = self.nc_threshold + 1
-            min_coeff = self.network.min_coeff_per_rxn[j]
-
-            # if no consumption, mark reaction as non critical and conditnue
-            if min_coeff >= 0:
-                critical_rxns.data.as_longs[j] = 0
-                continue
-
-            # iterate across states
-            for i in xrange(self.network.N):
-                stoich_coeff = self.network.stoichiometry.data.as_longs[i*self.network.M+j]
-                if stoich_coeff < 0:
-                    max_firings = states.data.as_longs[i]/(stoich_coeff/min_coeff)
-                    if max_firings < self.nc_threshold:
-                        critical_rxns.data.as_longs[j] = 1
-                        break
-
-        return critical_rxns
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    cdef double get_candidate_leap(self, array states, array rxn_rates, array non_critical_rxns, double max_leap):
-        """ Proposes candidate leap time based on expected state change. """
-
-        cdef int i, j
-        cdef int index
-        cdef long species_index
-        cdef double rate
-        cdef double candidate_leap = max_leap
-        cdef double tolerable_change
-        cdef array extent_mean = clone(self.float_template, self.network.N, zero=1)
-        cdef array extent_std = clone(self.float_template, self.network.N, zero=1)
-        cdef double proposed_1, proposed_2
-
-        # get mean and variance of expected state changes
-        for j in xrange(self.network.M):
-            if non_critical_rxns.data.as_longs[j] == 1:
-                rate = rxn_rates.data.as_doubles[j]
-                if rate > 0:
-                    for i in xrange(self.network.N):
-                         extent_mean[i] += rate*self.network.stoichiometry.data.as_longs[i*self.network.M+j]
-                         extent_std[i] += rate*((self.network.stoichiometry.data.as_longs[i*self.network.M+j])**2)
-
-        # take absolute value
-        for i in xrange(self.network.N):
-            extent_mean[i] = fabs(extent_mean[i])
-
-        # iterate across reactive species
-        for index in xrange(self.network.num_reactant_species):
-            species_index = self.network.reactant_species[index]
-
-            # get numerator
-            tolerable_change = self.epsilon * states.data.as_longs[species_index]
-            if tolerable_change < 1.:
-                tolerable_change = 1.
-
-            # try first proposed leap (if valid)
-            if extent_mean[species_index] != 0.:
-                proposed_1 = tolerable_change / extent_mean[species_index]
-                if proposed_1 < candidate_leap:
-                    candidate_leap = proposed_1
-
-            # try second proposed leap (if valid)
-            if extent_std[species_index] != 0.:
-                proposed_2 = (tolerable_change**2) / extent_std[species_index]
-                if proposed_2 < candidate_leap:
-                    candidate_leap = proposed_2
-
-        return candidate_leap
+            cumulative.data.as_doubles[i] += (tau * states.data.as_uints[i])
 
 
-cdef inline double get_timestep(double total_rate):
+cdef class cStoichiometry:
+    cdef array index
+    cdef array lengths
+    cdef array species
+    cdef array coefficients
+
+    def __init__(self, unsigned int[:] index,
+                       unsigned int[:] lengths,
+                       unsigned int[:] species,
+                       long[:] coefficients):
+
+        self.index = array('I', index)
+        self.lengths = array('I', lengths)
+        self.species = array('I', species)
+        self.coefficients = array('l', coefficients)
+
+    @staticmethod
+    def from_array(np.ndarray s):
+        rxns, species = s.T.nonzero()
+        lengths = np.bincount(rxns).astype(np.uint32)
+        index = np.hstack((np.zeros(1), np.cumsum(lengths))).astype(np.uint32)
+        coefficients = s.T[(rxns, species)].astype(np.int64)
+        return cStoichiometry(index, lengths, species.astype(np.uint32), coefficients)
+
+cdef inline double get_timestep(double total_rate, double random) nogil:
     """ Sample time until next reaction from exponential distribution. """
-    cdef double random_float = rand()/(RAND_MAX*1.0)
-    return (1/total_rate) * log(1/random_float)
+    return (1/total_rate) * log(1/random)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef int choose_rxn(array rates, int num_rxns, double total_rate) nogil:
-    """ Probabilistically selects reaction based on rate. """
-    cdef double rate, r
-    cdef int index
-    #cdef double total_rate = cython_sum.sum_double_arr(rates, num_rxns)
-
-    r = rand()/(RAND_MAX*1.0)
-    for index in xrange(num_rxns):
-        rate = rates.data.as_doubles[index]
-        if r < 0:
-            index -= 1
-            break
-        r -= rate / total_rate
-    return index
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef int choose_rxn_sorted(array order, array rates, int num_rxns, double total_rate) nogil:
+cdef unsigned int choose_rxn(array order, array rates, unsigned int num_rxns, double total_rate, double random) nogil:
     """ Probabilistically selects reaction based on rate. """
     cdef double rate = 0
     cdef double r
-    cdef int index
+    cdef unsigned int index
 
     # NOTE: if random number is high and last reaction puts rate over total, the r<=0 comparison is never activated and the index isn't incremented by the subsequent loop. solution is to correct index following the comparison
-    r = total_rate*rand()/(RAND_MAX*1.0)
+    r = total_rate * random
     for index in xrange(num_rxns):
-        rate = rates.data.as_doubles[order.data.as_longs[index]]
+        rate = rates.data.as_doubles[order.data.as_uints[index]]
         if r <= 0:
             index -= 1
             break
         r -= rate
-    return order.data.as_longs[index]
-
-cdef double float_sum(np.ndarray[np.float_t, ndim=1] vals):
-    """ Return sum of an array of type double. """
-    return cython_sum.compute_float_sum(vals, vals.size)
-
-cdef long int_sum(np.ndarray[np.int_t, ndim=1] vals):
-    """ Return sum of an array of type double. """
-    return cython_sum.compute_long_sum(vals, vals.size)
-
-cdef double min_float(np.ndarray[np.float_t, ndim=1] vals):
-    """ Return minimum from array of type long. """
-    return cython_sum.get_min_float(vals, vals.size)
-
-cdef long min_int(np.ndarray[np.int_t, ndim=1] vals):
-    """ Return minimum from array of type long. """
-    return cython_sum.get_min_int(vals, vals.size)
-
-cdef array get_logical_not(array arr, int arr_size):
-    """ Returns boolean mask for logical_not of a type long memoryview. """
-    cdef int i
-    cdef long val
-    cdef array opp = clone(arr, arr_size, zero=1)
-
-    for i in xrange(arr_size):
-        val = arr.data.as_longs[i]
-        if val == 0:
-            opp.data.as_longs[i] = 1
-    return opp
-
-cdef double sum_array_subset(array arr, array mask, int arr_size) nogil:
-    """ Sum a slice of a 1d array of type double. """
-    cdef double subset_sum = 0
-    cdef int index
-    for i in xrange(arr_size):
-        if mask.data.as_longs[i] == 1:
-            subset_sum += arr.data.as_doubles[i]
-    return subset_sum
+    return order.data.as_uints[index]
 
 
 class Solver:
@@ -491,12 +340,13 @@ class Solver:
         stoichiometry = array('l', network.stoichiometry.astype(np.int64).tobytes())
 
         # get cythonized rate function and network
-        stoich_dict = self.get_stoichiometry_dict(network)
+        #stoich_dict = self.get_stoichiometry_dict(network)
+        stoich = cStoichiometry.from_array(network.stoichiometry)
         rate_function = RateFunction(network).cRateFunction
         reactant_species = np.where(network.stoichiometry.min(axis=1) <= 0)[0]
         num_reactant_species = reactant_species.size
         min_coeff_per_rxn = network.stoichiometry.min(axis=0)
-        c_network = cNetwork(N, M, I, stoichiometry, min_coeff_per_rxn, reactant_species, num_reactant_species, rate_function, stoich_dict)
+        c_network = cNetwork(N, M, I, stoichiometry, min_coeff_per_rxn, reactant_species, num_reactant_species, rate_function, stoich)
 
         self.c_solver = cSolver(c_network)
 
@@ -531,7 +381,7 @@ class Solver:
             input_function = deepcopy(input_function)
 
         # check initial condition type
-        ic = ic.astype(np.int64)
+        ic = ic.astype(np.uint32)
 
         # set initial condition for integrator
         if integrator_ic is None:
