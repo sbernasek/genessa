@@ -4,7 +4,7 @@ cimport numpy as np
 
 
 cdef class cSpeciesDependent:
-    cdef int M
+    cdef unsigned int M
     cdef array k
     cdef array species_ind, n_active_species, species, species_dependence
     cdef array rates
