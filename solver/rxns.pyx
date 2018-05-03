@@ -722,8 +722,8 @@ cdef class cCoupling(cSpeciesDependent):
         rate = (self.k.data.as_doubles[rxn] + coupling_strength) * self.get_availability(rxn, states)
 
         # # update rate
-        # if rate < 0:
-        #     rate = 0
+        if rate < 0:
+            rate = 0
 
         return rate
 
