@@ -62,6 +62,30 @@ cdef class cNetwork:
     cdef void update(self, array states, array input_value, array cumulative, unsigned int rxn_fired) nogil:
         self.rate_function.update(states, input_value, cumulative, rxn_fired)
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef void cset_species_rates(self, array states, array inputs, array cumul, array rates) nogil:
+
+        cdef unsigned int rxn
+        cdef double rxn_rate
+        cdef unsigned int N, index, count, species
+        cdef int coefficient
+
+        # get reaction rates
+        self.rate_function.cupdate(states, inputs, cumul)
+
+        # for each reaction
+        for rxn in xrange(self.M):
+            rxn_rate = self.rate_function.rates.data.as_doubles[rxn]
+            N = self.stoich.lengths.data.as_uints[rxn]
+            index = self.stoich.index.data.as_uints[rxn]
+
+            # update each active state
+            for count in xrange(N):
+                species = self.stoich.species.data.as_uints[index]
+                coefficient = self.stoich.coefficients.data.as_longs[index]
+                rates.data.as_doubles[species] += (coefficient * rxn_rate)
+                index += 1
 
 cdef class cSolver:
     cdef cNetwork network
@@ -83,7 +107,15 @@ cdef class cSolver:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cpdef ssa(self, unsigned int[::1] ic, cSignal input_function,
+    cpdef array get_sp_rates(self, array states, array inputs, array cumul):
+        """ Returns continuous species rates. """
+        cdef array rates = array('d', self.network.N*[0.])
+        self.network.cset_species_rates(states, inputs, cumul, rates)
+        return rates
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cpdef tuple ssa(self, unsigned int[::1] ic, cSignal input_function,
                 double[::1] integrator_ic,
                 double dt=1., double duration=100, bint integrate=0):
         """ Python interface for SSA. """
@@ -297,9 +329,11 @@ cdef class cStoichiometry:
         coefficients = s.T[(rxns, species)].astype(np.int64)
         return cStoichiometry(index, lengths, species.astype(np.uint32), coefficients)
 
+
 cdef inline double get_timestep(double total_rate, double random) nogil:
     """ Sample time until next reaction from exponential distribution. """
     return (1/total_rate) * log(1/random)
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)

@@ -5,6 +5,7 @@ from scipy.misc import comb
 import functools
 from operator import mul, add
 import copy
+from .solver.rxns import RateFunction as cRateFunction
 
 
 def name_parameter(parameter, default_name='k'):
@@ -284,9 +285,9 @@ class EnzymaticReaction:
         if type(input_dependence) == int:
             input_dependence = [input_dependence]
         if input_dependence is not None:
-            self.input_dependence = np.array(input_dependence, dtype=np.int64)
+            self.input_dependence = np.array(input_dependence, dtype=np.float64)
         else:
-            self.input_dependence = np.zeros(1, dtype=np.int64)
+            self.input_dependence = np.zeros(1, dtype=np.float64)
 
         # set parameters
         if parameters is None:
@@ -474,9 +475,9 @@ class EnzymaticRepressor:
         if type(input_dependence) == int:
             input_dependence = [input_dependence]
         if input_dependence is not None:
-            self.input_dependence = np.array(input_dependence, dtype=np.int64)
+            self.input_dependence = np.array(input_dependence, dtype=np.float64)
         else:
-            self.input_dependence = np.zeros(1, dtype=np.int64)
+            self.input_dependence = np.zeros(1, dtype=np.float64)
 
         # set parameters
         if parameters is None:
@@ -525,7 +526,7 @@ class EnzymaticRepressor:
         """
 
         # get substrate activity
-        substrate_activity = (self._propensity * states[self.active_substrates]).sum() + (self.input_dependence *input_state).sum()
+        substrate_activity = (self._propensity * states[self.active_substrates]).sum() + (self.input_dependence * input_state).sum()
 
         # get overall rate
         occupancy = (substrate_activity**self.n)/(substrate_activity**self.n + self.k_m**self.n)
@@ -739,11 +740,13 @@ class Coupling:
         """
 
         # get substrate activity
-        rate = (self._propensity * states[self.active_species]).sum()
+        rate = 0
+        if self._propensity.size != 0:
+            rate += (self._propensity * states[self.active_species]).sum()
+            N = self.active_species.size
+            rate *= (self.a*self.w / (1+self.w * (N - 1)))
 
-        # apply constants
-        N = self.active_species.size
-        rate *= (self.a*self.w / (1+self.w * (N - 1)))
+        # add constant term
         rate += self.k[0]
 
         # get repressor inhibition effects
@@ -762,6 +765,7 @@ class RateFunction:
         self.N = network.nodes.size
         self.M = len(network.reactions)
         self.reactions = network.reactions
+        self.cRateFunction = cRateFunction(network)
 
     def __call__(self, states, input_state):
         return self.get_rates(states, input_state)
@@ -776,6 +780,16 @@ class RateFunction:
         rates = np.zeros(self.N, dtype=np.float64)
         for rxn in self.reactions:
             rates += rxn.get_rate(states, input_state) * rxn.stoichiometry
+        return rates
+
+    def cget_rxn_rates(self, states, input_state, cumul):
+        return self.cRateFunction(states, input_state, cumul)
+
+    def cget_rates(self, states, input_state, cumul):
+        rates = np.zeros(self.N, dtype=np.float64)
+        rxn_rates = self.cRateFunction(states, input_state, cumul)
+        for i, rxn in enumerate(self.reactions):
+            rates += rxn_rates[i] * rxn.stoichiometry
         return rates
 
 

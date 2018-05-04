@@ -48,12 +48,6 @@ cdef class cSpeciesDependent:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef double get_rate(self, unsigned int rxn) nogil:
-        """ Get rate of specified reaction """
-        return self.rates.data.as_doubles[rxn]
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
     cdef double get_species_activity(self, unsigned int rxn, array states) nogil:
         return self.get_species_activity_product(rxn, states)
 
@@ -153,6 +147,29 @@ cdef class cPController(cSpeciesDependent):
 
         #self.rates.data.as_doubles[rxn] = rate
         return rate
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double cget_rate(self, unsigned int rxn, array states) nogil:
+        """ Get rate of specified reaction """
+
+        cdef unsigned int count, ind
+        cdef double n, value
+        cdef unsigned int index
+        cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
+        cdef double k = self.k.data.as_doubles[rxn]
+        cdef double activity = 1
+
+        # integrate species activity
+        index = self.species_ind.data.as_uints[rxn]
+        for count in xrange(N):
+            ind = self.species.data.as_uints[index]
+            value = states.data.as_doubles[ind]
+            n = self.species_dependence.data.as_doubles[index]
+            activity += (value*n)
+            index += 1
+
+        return k*activity
 
 
 cdef class cIController(cPController):
@@ -322,6 +339,39 @@ cdef class cMassAction(cInputDependent):
         #self.rates.data.as_doubles[rxn] = rate
         return rate
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double cget_rate(self, unsigned int rxn, array states, array input_values) nogil:
+        """ Get rate of specified reaction """
+
+        cdef unsigned int count, ind
+        cdef double n, value
+        cdef unsigned int index
+        cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
+        cdef unsigned int I = self.n_active_inputs.data.as_uints[rxn]
+        cdef double k = self.k.data.as_doubles[rxn]
+        cdef double activity = 1
+
+        # integrate species activity
+        index = self.species_ind.data.as_uints[rxn]
+        for count in xrange(N):
+            ind = self.species.data.as_uints[index]
+            value = states.data.as_doubles[ind]
+            n = self.species_dependence.data.as_doubles[index]
+            activity *= (value**n)
+            index += 1
+
+        # integrate input activity
+        index = self.inputs_ind.data.as_uints[rxn]
+        for count in xrange(I):
+            ind = self.species.data.as_uints[index]
+            value = input_values.data.as_doubles[ind]
+            n = self.input_dependence.data.as_doubles[index]
+            activity *= (value**n)
+            index += 1
+
+        return k*activity
+
 
 cdef class cSDRepressor(cSpeciesDependent):
     def __init__(self,
@@ -345,7 +395,7 @@ cdef class cSDRepressor(cSpeciesDependent):
     cdef cSDRepressor get_blank_cSDRepressor():
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
-        return cSDRepressor(0, xf, xf, xl, xl, xf, {})
+        return cSDRepressor(0, xf, xf, xl, xl, xf, {0:[]})
 
     @staticmethod
     cdef cSDRepressor from_list(list rxns, dict rxn_map):
@@ -404,6 +454,33 @@ cdef class cSDRepressor(cSpeciesDependent):
     cdef void update(self, array states, unsigned int fired) nogil:
         """ Update occupancies for repressors that have changed. """
         self.rxn_map.app_rep(self, fired, self.set_occupancy, states)
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double cget_occupancy(self, array states, unsigned int rep) nogil:
+        """ Get rate of specified reaction """
+
+        cdef unsigned int count, ind
+        cdef double coefficient, value
+        cdef unsigned int index
+        cdef unsigned int N = self.n_active_species.data.as_uints[rep]
+        cdef double k_m = self.k_m.data.as_doubles[rep]
+        cdef double n = self.n.data.as_doubles[rep]
+        cdef double activity = 0
+        cdef double occupancy
+
+        # integrate species activity
+        index = self.species_ind.data.as_uints[rep]
+        for count in xrange(N):
+            ind = self.species.data.as_uints[index]
+            value = states.data.as_doubles[ind]
+            coefficient = self.species_dependence.data.as_doubles[index]
+            activity += (value*coefficient)
+            index += 1
+
+        occupancy = (activity**n) / ( (activity**n) + (k_m**n) )
+
+        return occupancy
 
 
 cdef class cIDRepressor(cInputDependent):
@@ -487,6 +564,43 @@ cdef class cIDRepressor(cInputDependent):
         # compute occupancy
         k_m = self.k_m.data.as_doubles[rep]
         n = self.n.data.as_doubles[rep]
+        occupancy = (activity**n) / ( (activity**n) + (k_m**n) )
+
+        return occupancy
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double cget_occupancy(self, array states, array input_values, unsigned int rep) nogil:
+        """ Get rate of specified reaction """
+
+        cdef unsigned int count, ind
+        cdef double coefficient, value
+        cdef unsigned int index
+        cdef unsigned int N = self.n_active_species.data.as_uints[rep]
+        cdef unsigned int I = self.n_active_inputs.data.as_uints[rep]
+        cdef double k_m = self.k_m.data.as_doubles[rep]
+        cdef double n = self.n.data.as_doubles[rep]
+        cdef double activity = 0
+        cdef double occupancy
+
+        # integrate species activity
+        index = self.species_ind.data.as_uints[rep]
+        for count in xrange(N):
+            ind = self.species.data.as_uints[index]
+            value = states.data.as_doubles[ind]
+            coefficient = self.species_dependence.data.as_doubles[index]
+            activity += (value*coefficient)
+            index += 1
+
+        # integrate input activity
+        index = self.inputs_ind.data.as_uints[rep]
+        for count in xrange(I):
+            ind = self.species.data.as_uints[index]
+            value = input_values.data.as_doubles[ind]
+            coefficient = self.input_dependence.data.as_doubles[index]
+            activity += (value*coefficient)
+            index += 1
+
         occupancy = (activity**n) / ( (activity**n) + (k_m**n) )
 
         return occupancy
@@ -617,6 +731,54 @@ cdef class cHill(cIDRepressor):
         #self.rates.data.as_doubles[rxn] = rate
         return rate
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double cget_rate(self, unsigned int rxn, array states, array input_values) nogil:
+        """ Get rate of specified reaction """
+
+        cdef unsigned int count, ind
+        cdef double coefficient, value
+        cdef unsigned int index
+        cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
+        cdef unsigned int I = self.n_active_inputs.data.as_uints[rxn]
+        cdef unsigned int R = self.n_repressors.data.as_uints[rxn]
+        cdef double vmax = self.k.data.as_doubles[rxn]
+        cdef double k_m = self.k_m.data.as_doubles[rxn]
+        cdef double n = self.n.data.as_doubles[rxn]
+        cdef double activity = 0
+        cdef double occupancy
+        cdef double rate
+
+        # integrate species activity
+        index = self.species_ind.data.as_uints[rxn]
+        for count in xrange(N):
+            ind = self.species.data.as_uints[index]
+            value = states.data.as_doubles[ind]
+            coefficient = self.species_dependence.data.as_doubles[index]
+            activity += (value*coefficient)
+            index += 1
+
+        # integrate input activity
+        index = self.inputs_ind.data.as_uints[rxn]
+        for count in xrange(I):
+            ind = self.species.data.as_uints[index]
+            value = input_values.data.as_doubles[ind]
+            coefficient = self.input_dependence.data.as_doubles[index]
+            activity += (value*coefficient)
+            index += 1
+
+        # compute rate
+        rate = vmax * ( (activity**n) / ( (activity**n) + (k_m**n) ) )
+
+        # integrate repressor occupancies (multiplicative)
+        index = self.repressors_ind.data.as_uints[rxn]
+        for count in xrange(R):
+            occupancy = self.rep_obj.cget_occupancy(states, input_values, index)
+            rate *= (1-occupancy)
+            index += 1
+
+        return rate
+
 
 cdef class cCoupling(cSpeciesDependent):
     def __init__(self,
@@ -656,7 +818,7 @@ cdef class cCoupling(cSpeciesDependent):
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
         cdef cSDRepressor rep = cSDRepressor.get_blank_cSDRepressor()
-        return cCoupling(0, xf, xf, xl, xl, xf, rep, xl, {})
+        return cCoupling(0, xf, xf, xl, xl, xf, rep, xl, {0:[]})
 
     @staticmethod
     cdef cCoupling from_list(list rxns, dict edge_map, dict repressor_map):
@@ -756,6 +918,43 @@ cdef class cCoupling(cSpeciesDependent):
         """ Update occupancies for repressors that have changed. """
         self.rxn_map.app_coup(self, fired, self.update_activity, states)
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double cget_rate(self, unsigned int rxn, array states) nogil:
+        """ Get rate of specified reaction """
+
+        cdef unsigned int count, ind
+        cdef double coefficient, value
+        cdef unsigned int index
+        cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
+        cdef unsigned int R = self.n_repressors.data.as_uints[rxn]
+        cdef double k = self.k.data.as_doubles[rxn]
+        cdef double weight = self.weight.data.as_doubles[rxn]
+        cdef double activity = 0
+        cdef double occupancy
+        cdef double rate
+
+        # integrate species activity
+        index = self.species_ind.data.as_uints[rxn]
+        for count in xrange(N):
+            ind = self.species.data.as_uints[index]
+            value = states.data.as_doubles[ind]
+            coefficient = self.species_dependence.data.as_doubles[index]
+            activity += (value*coefficient)
+            index += 1
+
+        # compute rate
+        rate = k + (weight * activity)
+
+        # integrate repressor occupancies (multiplicative)
+        index = self.repressors_ind.data.as_uints[rxn]
+        for count in xrange(R):
+            occupancy = self.rep_obj.cget_occupancy(states, index)
+            rate *= (1-occupancy)
+            index += 1
+
+        return rate
+
 
 cdef class cRxnMap:
 
@@ -844,12 +1043,6 @@ cdef class cRateFunction:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef array get_rxn_rates(self):
-        """ Get current rate vector. """
-        return self.rates
-
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
     cdef double evaluate(self, unsigned int rxn, array states, array inputs, array cumul) nogil:
         """ Update rate of individual reaction. """
 
@@ -916,6 +1109,45 @@ cdef class cRateFunction:
             self.coupling.rep_obj.update(states, rxn)
             self.set_rate(rxn, states, inputs, cumul)
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef void cupdate(self, array states, array inputs, array cumul) nogil:
+        """ Update all reaction rates using continuous rate functions. """
+
+        cdef unsigned int rxn
+        cdef double rate
+        cdef unsigned int rxn_type, rxn_key
+
+        # iterate across reactions
+        for rxn in xrange(self.M):
+
+            # get reaction type
+            rxn_type = self.rxn_types.data.as_uints[rxn]
+            rxn_key = self.rxn_keys.data.as_uints[rxn]
+
+            # get reaction rate
+            if rxn_type == 0:
+                rate = self.coupling.cget_rate(rxn_key, states)
+            elif rxn_type == 1:
+                rate = self.massaction.cget_rate(rxn_key, states, inputs)
+            elif rxn_type == 2:
+                rate = self.hill.cget_rate(rxn_key, states, inputs)
+            elif rxn_type == 3:
+                rate = self.icontrol.cget_rate(rxn_key, cumul)
+            elif rxn_type == 4:
+                rate = self.pcontrol.cget_rate(rxn_key, states)
+            else:
+                pass
+
+            self.rates.data.as_doubles[rxn] = rate
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cpdef array cget_rxn_rates(self, array states, array inputs, array cumul):
+        """ Update continuous rates and return current rate vector. """
+        self.cupdate(states, inputs, cumul)
+        return self.rates
+
 
 # ==============================END CYTHON=================================== #
 
@@ -966,13 +1198,23 @@ class RateFunction:
         rxn_map = self.get_rxn_map(cell, maptype='propensity')
         input_map = self.get_input_map(cell)
 
-
         # set reaction lists
         rxn_types = np.array(rxn_types, dtype=np.uint32)
         rxn_keys = self.get_rxn_keys(rxn_types)
 
         # instantiate cReactions object
         self.cRateFunction = cRateFunction(coupling, massaction, hill, icontrol, pcontrol, rxn_types, rxn_keys, rxn_map, input_map)
+
+    def __call__(self, states, input_value, cumul):
+        """
+        Get rate vector from cRateFunction.get_rxn_rate
+
+        Args:
+        states (np array, dtype=np.uint32)
+        input_value (np array, dtype=np.float64)
+        cumul (np array, dtype=np.float64)
+        """
+        return self.cRateFunction.cget_rxn_rates(states, input_value, cumul)
 
     @staticmethod
     def get_rxn_keys(rxn_types):
@@ -987,12 +1229,13 @@ class RateFunction:
         """ Returns dictionary where keys are states and values are lists of  repressor indices whose occupancies depend upon each state. """
         adict = {i: [] for i in range(network.nodes.size)}
         rxns = [rxn for rxn in network.reactions if rxn.__class__.__name__=='Coupling']
-        repressors = reduce(add, [rxn.repressors for rxn in rxns])
-        for i, repressor in enumerate(repressors):
 
+        if len(rxns) > 0:
             # store index of repressor i whose occupancy depends on state s
-            for s in repressor.active_substrates:
-                adict[s].append(i)
+            repressors = reduce(add, [rxn.repressors for rxn in rxns])
+            for i, repressor in enumerate(repressors):
+                for s in repressor.active_substrates:
+                    adict[s].append(i)
 
         return adict
 
@@ -1000,11 +1243,13 @@ class RateFunction:
     def get_edge_dict(network):
         """ Returns dictionary where keys are states and values are lists of  repressor indices whose occupancies depend upon each state. """
         adict = {i: [] for i in range(network.nodes.size)}
-        dependents = np.hstack([rxn.active_species for rxn in network.reactions if rxn.__class__.__name__=='Coupling'])
+        rxns = [rxn for rxn in network.reactions if rxn.__class__.__name__=='Coupling']
 
         # store index of edge whose activity depends on state
-        for edge, state in enumerate(dependents):
-            adict[state].append(edge)
+        if len(rxns) > 0:
+            dependents = np.hstack([rxn.active_species for rxn in rxns])
+            for edge, state in enumerate(dependents):
+                adict[state].append(edge)
         return adict
 
     @staticmethod
@@ -1059,28 +1304,5 @@ class RateFunction:
                 adict[s].append(j)
         return adict
 
-    def __call__(self, states, input_value, cumulative):
-        """
-        Get rate vector from cRateFunction.get_rxn_rate
-
-        Args:
-        states (np array, dtype=np.float64)
-        input_value (np array, dtype=np.float64)
-        """
-        return self.get_rxn_rates(states, input_value, cumulative)
-
-    def get_callable(self):
-        """ Get callable cRateFunction.get_rxn_rates instance. """
-        return self.cRateFunction.get_rxn_rates
-
-    def get_rxn_rates(self, states, input_value, cumulative):
-        """
-        Call cRateFunction.get_rxn_rate.
-
-        Args:
-        states (np array, dtype=np.float64)
-        input_value (np array, dtype=np.float64)
-        """
-        return self.cRateFunction.get_rxn_rates(states, input_value, cumulative)
 
 

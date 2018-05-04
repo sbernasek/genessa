@@ -7,6 +7,7 @@ from .parameters import conditions
 from copy import deepcopy
 import numpy as np
 import types
+from array import array
 
 #import warnings
 #warnings.filterwarnings('error')
@@ -32,6 +33,8 @@ class Integrator:
                 raise ValueError('Condition not recognized.')
             else:
                 self.apply_rate_scaling(condition)
+
+        self.solver = cySolver(self.network)
 
 
     def apply_rate_scaling(self, condition):
@@ -66,49 +69,69 @@ class Integrator:
 
         # if no initial condition is provided, assume all states are zero
         if ic is None:
-            ic = np.zeros(self.network.nodes.size, dtype=np.int64)
+            ic = np.zeros(self.network.nodes.size, dtype=np.uint32)
         elif type(ic) == list or type(ic) == tuple:
-            ic = np.array(ic, dtype=np.int64)
+            ic = np.array(ic, dtype=np.uint32)
         if len(ic) != self.network.nodes.size:
             raise RuntimeError('IC dimensions inconsistent with system.')
 
-        times = np.arange(0, duration, dt)
-        rate_function = RateFunction(self.network)
+        # if no input function, use zeros
+        if input_function is None:
+            I = self.network.input_size
+            input_value = lambda t: array('d', np.zeros(I, dtype=np.float64))
+        else:
+            input_value = lambda t: input_function(t)
 
+        # cumulative is not supported
+        cumul = array('d', np.zeros(self.network.nodes.size, dtype=np.float64))
+
+        # define rate function
         def derivative(x, t):
-            dxdt = rate_function(x, input_function(t))
+            dxdt = self.solver.c_solver.get_sp_rates(array('d', x), input_value(t), cumul)
             return dxdt
 
         # run solver and compile timeseries
+        times = np.arange(0, duration, dt)
         solout = odeint(derivative, y0=ic, t=times)
         timeseries = TimeSeries(times, solout.reshape(1, *solout.T.shape))
         return timeseries
 
-    def solve_ivp(self, input_function=None, ic=None, duration=100, method='BDF'):
+    def solve_ivp(self, input_function=None, ic=None, dt=1, duration=100, method='BDF'):
         """
         Simulates dynamic system using Scipy's ode object.
         """
         from scipy.integrate import solve_ivp
+        from scipy.interpolate import interp1d
 
         # if no initial condition is provided, assume all states are zero
         if ic is None:
-            ic = np.zeros(self.network.nodes.size, dtype=np.int64)
+            ic = np.zeros(self.network.nodes.size, dtype=np.uint32)
         elif type(ic) == list or type(ic) == tuple:
-            ic = np.array(ic, dtype=np.int64)
+            ic = np.array(ic, dtype=np.uint32)
         if len(ic) != self.network.nodes.size:
             raise RuntimeError('IC dimensions inconsistent with system.')
 
-        rate_function = RateFunction(self.network)
+        # if no input function, use zeros
+        if input_function is None:
+            I = self.network.input_size
+            input_value = lambda t: array('d', np.zeros(I, dtype=np.float64))
+        else:
+            input_value = lambda t: input_function(t)
 
+        # cumulative is not supported
+        cumul = array('d', np.zeros(self.network.nodes.size, dtype=np.float64))
+
+        # define rate function
         def derivative(t, x):
-            dxdt = rate_function(x, input_function(t))
+            dxdt = self.solver.c_solver.get_sp_rates(array('d', x), input_value(t), cumul)
             return dxdt
 
         # run solver and compile timeseries
         solout = solve_ivp(derivative, (0, duration), ic, method=method)
-
         t, y = solout['t'], solout['y']
-        timeseries = TimeSeries(t, y.reshape(1, *y.shape))
+        interpolator = interp1d(t, y)
+        times = np.arange(0, duration, dt)
+        timeseries = TimeSeries(times, interpolator(times).reshape(1, self.network.nodes.size, times.size))
 
         return timeseries
 
@@ -117,15 +140,6 @@ class Simulation(Integrator):
     """
     Class defines a simulation procedure.
     """
-
-    def __init__(self, network, condition=None):
-        """
-        Parameters:
-            network (Network object)
-            condition (str) - environmental conditions affecting rate. either None, 'cold', 'hot', 'diabetic', or 'minute'
-        """
-        Integrator.__init__(self, network, condition)
-        self.solver = cySolver(self.network)
 
     def simulate(self, ic=None, input_function=None, integrator_ic=None, dt=1, duration=100, pure_ssa=True):
         """
