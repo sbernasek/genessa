@@ -4,7 +4,6 @@
 """
 TO DO:
 
-1. convert to unsigned ints/floats?
 
 """
 
@@ -1046,30 +1045,28 @@ cdef class cRateFunction:
     cdef double evaluate(self, unsigned int rxn, array states, array inputs, array cumul) nogil:
         """ Update rate of individual reaction. """
 
-        cdef double rate
-        cdef unsigned int rxn_type = self.rxn_types.data.as_uints[rxn]
-        cdef unsigned int rxn_key = self.rxn_keys.data.as_uints[rxn]
+        #cdef double rate
+        #cdef unsigned int rxn_type = self.rxn_types.data.as_uints[rxn]
+        #cdef unsigned int rxn_key = self.rxn_keys.data.as_uints[rxn]
 
         # get reaction rate
-        if rxn_type == 0:
-            rate = self.coupling.update(rxn_key, states)
+        if self.rxn_types.data.as_uints[rxn] == 0:
+            return self.coupling.update(self.rxn_keys.data.as_uints[rxn], states)
 
-        elif rxn_type == 1:
-            rate = self.massaction.update(rxn_key, states, inputs)
+        elif self.rxn_types.data.as_uints[rxn] == 1:
+            return self.massaction.update(self.rxn_keys.data.as_uints[rxn], states, inputs)
 
-        elif rxn_type == 2:
-            rate = self.hill.update(rxn_key, states, inputs)
+        elif self.rxn_types.data.as_uints[rxn] == 2:
+            return self.hill.update(self.rxn_keys.data.as_uints[rxn], states, inputs)
 
-        elif rxn_type == 3:
-            rate = self.icontrol.update(rxn_key, cumul)
+        elif self.rxn_types.data.as_uints[rxn] == 3:
+            return self.icontrol.update(self.rxn_keys.data.as_uints[rxn], cumul)
 
-        elif rxn_type == 4:
-            rate = self.pcontrol.update(rxn_key, states)
+        elif self.rxn_types.data.as_uints[rxn] == 4:
+            return self.pcontrol.update(self.rxn_keys.data.as_uints[rxn], states)
 
         else:
-            pass
-
-        return rate
+            return 0.0
 
     @cython.boundscheck(False)
     @cython.wraparound(False)

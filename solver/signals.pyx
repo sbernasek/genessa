@@ -1,24 +1,55 @@
+# cython: boundscheck=False
+# cython: wraparound=False
 # cython: profile=False
 
 import numpy as np
 cimport numpy as np
 
 from cpython.array cimport array
-from cpython.array cimport copy as copyarray
-from array import array
+#from array import array
 
 cdef class cSignal:
     """ Class defines a single channel square pulse signal. """
 
-    def __init__(self, on=0, ndim=1):
-        levels = [on for _ in range(ndim)]
-        self.on = array('d', np.array(levels, dtype=np.float64))
+    def __init__(self, value=0, ndim=1):
+        self.I = ndim
+        levels = [value for _ in range(ndim)]
+        self.value = array('d', np.array(levels, dtype=np.float64))
 
     def __call__(self, double t):
         return self.get_signal(t)
 
     cdef array get_signal(self, double t):
-        return self.on
+        self.update(t)
+        return self.value
+
+    cdef void update(self, double t) nogil:
+        pass
+
+    cdef void reset(self) nogil:
+        pass
+
+    cdef void set_value(self, array values) nogil:
+        cdef unsigned int index
+        for index in xrange(self.I):
+            self.value.data.as_doubles[index] = values.data.as_doubles[index]
+
+    cdef bint compare_value(self, array values, unsigned int index) nogil:
+        cdef bint not_equal = 0
+        if self.value.data.as_doubles[index] != values.data.as_doubles[index]:
+            not_equal = 1
+        return not_equal
+
+    cdef bint compare_all(self, array values) nogil:
+        cdef bint not_equal = 0
+        cdef unsigned int index
+        cdef double value
+        for index in xrange(self.I):
+            value = values.data.as_doubles[index]
+            if self.value.data.as_doubles[index] != value:
+                not_equal = 1
+                break
+        return not_equal
 
 
 cdef class cSquarePulse(cSignal):
@@ -29,16 +60,20 @@ cdef class cSquarePulse(cSignal):
         self.t_off = t_off
         self.off = array('d', np.array([off], dtype=np.float64).flatten())
         self.on = array('d', np.array([on], dtype=np.float64).flatten())
+        self.I = len(self.off)
+        self.reset()
 
-    def __call__(self, double t):
-        return self.get_signal(t)
+    cdef void reset(self) nogil:
+        self.set_value(self.off)
 
-    cdef array get_signal(self, double t):
-        """ Get pulse value at a given time. """
-        if t < self.t_off:
-            if t >= self.t_on:
-                return self.on
-        return self.off
+    cdef void update(self, double t) nogil:
+        if t >= self.t_on:
+            if t < self.t_off:
+                self.set_value(self.on)
+            else:
+                self.set_value(self.off)
+        else:
+            pass
 
 
 cdef class cMultiPulse(cSignal):
@@ -50,21 +85,23 @@ cdef class cMultiPulse(cSignal):
         self.t_off = array('d', np.array(t_off, dtype=np.float64))
         self.off = array('d', np.array(off, dtype=np.float64))
         self.on = array('d', np.array(on, dtype=np.float64))
+        self.reset()
 
-    def __call__(self, double t):
-        return self.get_signal(t)
+    cdef void reset(self) nogil:
+        self.set_value(self.off)
 
-    cdef array get_signal(self, double t):
-        """ Get pulse values at a given time. """
-        cdef long index
-        cdef array values = copyarray(self.off)
+    cdef void update(self, double t) nogil:
+        cdef unsigned int index
 
         # get input from each channel
         for index in xrange(self.I):
-            if t < self.t_off.data.as_doubles[index]:
-                if t >= self.t_on.data.as_doubles[index]:
-                    values.data.as_doubles[index] = self.on.data.as_doubles[index]
-        return values
+            if t >= self.t_on.data.as_doubles[index]:
+                if t < self.t_off.data.as_doubles[index]:
+                    self.value.data.as_doubles[index] = self.on.data.as_doubles[index]
+                else:
+                    self.value.data.as_doubles[index] = self.off.data.as_doubles[index]
+            else:
+                pass
 
 
 cdef class cSquareWave(cSignal):
@@ -74,14 +111,16 @@ cdef class cSquareWave(cSignal):
         self.period = period
         self.off = array('d', np.array([off], dtype=np.float64).flatten())
         self.on = array('d', np.array([on], dtype=np.float64).flatten())
+        self.I = len(self.off)
+        self.reset()
 
-    def __call__(self, double t):
-        return self.get_signal(t)
+    cdef void reset(self) nogil:
+        self.set_value(self.off)
 
-    cdef array get_signal(self, double t):
+    cdef void update(self, double t) nogil:
         """ Get pulse value at a given time. """
 
         if (t // self.period) % 2 == 0:
-            return self.off
+            self.set_value(self.off)
         else:
-            return self.on
+            self.set_value(self.on)

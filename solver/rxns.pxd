@@ -1,6 +1,4 @@
 from cpython.array cimport array
-from array import array
-cimport numpy as np
 
 
 cdef class cSpeciesDependent:
