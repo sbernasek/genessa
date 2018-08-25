@@ -13,7 +13,7 @@ cimport rxndiffusion.solver.cython_sum as cython_sum
 from rxns cimport cSpeciesDependent, cInputDependent
 from rxns cimport cSDRepressor, cIDRepressor
 from rxns cimport cPController, cIController
-from rxns cimport cMassAction, cHill, cCoupling
+from rxns cimport cMassAction, cHill, cCoupling, cTranscription
 from rxns cimport cRxnMap, cRateFunction
 
 import numpy as np
@@ -1013,11 +1013,150 @@ cdef class cRxnMap:
                 index += 1
 
 
+cdef class cTranscription:
+    def __init__(self,
+                 unsigned int M,
+                 double[:] k,
+                 double[:] k_m,
+                 double[:] n,
+                 unsigned int[:] alpha_ind,
+                 double[:] alpha,
+                 double[:] rho,
+                 unsigned int[:] species_ind, # indexes position to rxn
+                 unsigned int[:] species, # species involved
+                 ):
+
+        # store number of reactions and vmax rate constants
+        self.M = M
+        self.k = array('d', k)
+        self.rho = array('d', rho)
+
+        # add state dependence
+        self.species_ind = array('I', species_ind)
+        self.n_active_species = array('I', np.diff(species_ind).astype(np.uint32))
+        self.species = array('I', species)
+
+        # store dna binding coefficients
+        self.k_m = array('d', k_m)
+        self.n = array('d', n)
+
+        # store alpha coefficients
+        self.alpha_ind = array('I', alpha_ind)
+        self.alpha = array('d', alpha)
+
+        # initialize rate vector
+        self.rates = array('d', np.zeros(M, dtype=np.float64))
+
+    @staticmethod
+    cdef cTranscription get_blank_cTranscription():
+        cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
+        cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
+        return cTranscription(0, xf, xf, xl, xl, xf, xf, xl, xf)
+
+    @staticmethod
+    cdef cTranscription from_list(list rxns):
+        """ Instantiate from list of reactions. """
+
+        cdef unsigned int M
+        cdef np.ndarray k, k_m, n, rho, alpha_ind, alpha
+        cdef np.ndarray species_ind, species
+
+        # return blank if no reactions of this type
+        M = len(rxns)
+        if M == 0:
+            return cTranscription.get_blank_cTranscription()
+
+        # get parameters
+        k = np.array([rxn.k[0] for rxn in rxns], dtype=np.float64)
+        k_m = np.hstack([rxn.k_m for rxn in rxns]).astype(np.float64)
+        n = np.hstack([rxn.n for rxn in rxns]).astype(np.float64)
+        rho = np.array([rxn.rho[0] for rxn in rxns], dtype=np.float64)
+
+        # get TF dependence
+        alpha_ind = np.cumsum([0]+[rxn.N_alpha for rxn in rxns]).astype(np.uint32)
+        alpha = np.hstack([rxn.alpha for rxn in rxns]).astype(np.float64)
+
+        # get transcription factor dependence
+        species_ind = np.cumsum([0]+[rxn.num_active_species for rxn in rxns]).astype(np.uint32)
+        species = np.hstack([rxn.active_species for rxn in rxns]).astype(np.uint32)
+
+        return cTranscription(M, k, k_m, n, alpha_ind, alpha, rho, species_ind, species)
+
+    cdef double evaluate_term(self, unsigned int index, array states) nogil:
+        cdef unsigned int species = self.species.data.as_uints[index]
+        cdef unsigned int state = states.data.as_uints[species]
+        cdef double k_m = self.k_m.data.as_doubles[index]
+        cdef double n = self.n.data.as_doubles[index]
+        return (state/k_m)**n
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double get_species_activity(self, unsigned int rxn, array states) nogil:
+        """ Integrate species activity for specified reaction. """
+
+        cdef unsigned int species_index = self.species_ind.data.as_uints[rxn]
+        cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
+        cdef unsigned int alpha_index = self.alpha_ind.data.as_uints[rxn]
+        cdef double rho = self.rho.data.as_doubles[rxn]
+
+        # assign constant term
+        cdef double alpha = self.alpha.data.as_doubles[alpha_index]
+        cdef double numerator = alpha
+        cdef double denominator = 1
+        cdef double v1, v2
+
+        if N > 0:
+
+            # add first independent term
+            alpha = self.alpha.data.as_doubles[alpha_index+1]
+            v1 = self.evaluate_term(species_index, states)
+            numerator += (alpha * v1)
+            denominator += v1
+
+            if N > 1:
+
+                # add second independent term
+                alpha = self.alpha.data.as_doubles[alpha_index+2]
+                v2 = self.evaluate_term(species_index+1, states)
+                numerator += (alpha * v2)
+                denominator += v2
+
+                # add coupled term
+                alpha = self.alpha.data.as_doubles[alpha_index+3]
+                numerator += alpha*rho*(v1*v2)
+                denominator += rho*(v1*v2)
+
+        return numerator/denominator
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double update(self, unsigned int rxn, array states) nogil:
+        """ Update rate of specified reaction. """
+        cdef double species_activity, rate
+
+        # compute species activities
+        species_activity = self.get_species_activity(rxn, states)
+
+        # set rate
+        rate = self.k.data.as_doubles[rxn] * species_activity
+
+        return rate
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef double cget_rate(self, unsigned int rxn, array states) nogil:
+        """ Get rate of specified reaction """
+        cdef double k = self.k.data.as_doubles[rxn]
+        cdef double activity = self.get_species_activity(rxn, states)
+        return k*activity
+
+
 cdef class cRateFunction:
 
     def __init__(self,
                  cCoupling coupling,
                  cMassAction massaction,
+                 cTranscription transcription,
                  cHill hill,
                  cIController icontrol,
                  cPController pcontrol,
@@ -1029,6 +1168,7 @@ cdef class cRateFunction:
         # store rate objects
         self.coupling = coupling
         self.massaction = massaction
+        self.transcription = transcription
         self.hill = hill
         self.icontrol = icontrol
         self.pcontrol = pcontrol
@@ -1061,12 +1201,15 @@ cdef class cRateFunction:
             return self.massaction.update(self.rxn_keys.data.as_uints[rxn], states, inputs)
 
         elif self.rxn_types.data.as_uints[rxn] == 2:
-            return self.hill.update(self.rxn_keys.data.as_uints[rxn], states, inputs)
+            return self.transcription.update(self.rxn_keys.data.as_uints[rxn], states)
 
         elif self.rxn_types.data.as_uints[rxn] == 3:
-            return self.icontrol.update(self.rxn_keys.data.as_uints[rxn], cumul)
+            return self.hill.update(self.rxn_keys.data.as_uints[rxn], states, inputs)
 
         elif self.rxn_types.data.as_uints[rxn] == 4:
+            return self.icontrol.update(self.rxn_keys.data.as_uints[rxn], cumul)
+
+        elif self.rxn_types.data.as_uints[rxn] == 5:
             return self.pcontrol.update(self.rxn_keys.data.as_uints[rxn], states)
 
         else:
@@ -1132,10 +1275,12 @@ cdef class cRateFunction:
             elif rxn_type == 1:
                 rate = self.massaction.cget_rate(rxn_key, states, inputs)
             elif rxn_type == 2:
-                rate = self.hill.cget_rate(rxn_key, states, inputs)
+                rate = self.transcription.cget_rate(rxn_key, states)
             elif rxn_type == 3:
-                rate = self.icontrol.cget_rate(rxn_key, cumul)
+                rate = self.hill.cget_rate(rxn_key, states, inputs)
             elif rxn_type == 4:
+                rate = self.icontrol.cget_rate(rxn_key, cumul)
+            elif rxn_type == 5:
                 rate = self.pcontrol.cget_rate(rxn_key, states)
             else:
                 pass
@@ -1160,7 +1305,7 @@ class RateFunction:
         Args:
         rxns (list of reaction instances)
         """
-        coupling, massaction, hill, icontrol, pcontrol = [], [], [], [], []
+        coupling, massaction, transcription, hill, icontrol, pcontrol = [], [], [], [], [], []
         rxn_types = []
 
         for rxn in cell.reactions:
@@ -1170,14 +1315,17 @@ class RateFunction:
             elif rxn.__class__.__name__ == 'Reaction':
                 rxn_types.append(1)
                 massaction.append(rxn)
-            elif rxn.__class__.__name__ == 'EnzymaticReaction':
+            elif rxn.__class__.__name__ == 'Transcription':
                 rxn_types.append(2)
+                transcription.append(rxn)
+            elif rxn.__class__.__name__ == 'EnzymaticReaction':
+                rxn_types.append(3)
                 hill.append(rxn)
             elif rxn.__class__.__name__ == 'IntegralController':
-                rxn_types.append(3)
+                rxn_types.append(4)
                 icontrol.append(rxn)
             elif rxn.__class__.__name__ == 'ProportionalController':
-                rxn_types.append(4)
+                rxn_types.append(5)
                 pcontrol.append(rxn)
             else:
                 raise ValueError('{} reaction type not recognized.'.format(rxn.__class__.__name__))
@@ -1191,6 +1339,7 @@ class RateFunction:
         # get rate objects
         coupling = cCoupling.from_list(coupling, edge_map, repressor_map)
         massaction = cMassAction.from_list(massaction)
+        transcription = cTranscription.from_list(transcription)
         hill = cHill.from_list(hill)
         icontrol = cIController.from_list(icontrol)
         pcontrol = cPController.from_list(pcontrol)
@@ -1204,7 +1353,7 @@ class RateFunction:
         rxn_keys = self.get_rxn_keys(rxn_types)
 
         # instantiate cReactions object
-        self.cRateFunction = cRateFunction(coupling, massaction, hill, icontrol, pcontrol, rxn_types, rxn_keys, rxn_map, input_map)
+        self.cRateFunction = cRateFunction(coupling, massaction, transcription, hill, icontrol, pcontrol, rxn_types, rxn_keys, rxn_map, input_map)
 
     def __call__(self, states, input_value, cumul):
         """
@@ -1300,11 +1449,9 @@ class RateFunction:
         adict = {i: [] for i in range(network.input_size)}
         for (j, rxn) in enumerate(network.reactions):
             rxn_type = rxn.__class__.__name__
-            if rxn_type in ('Coupling', 'SumReaction', 'ProportionalController', 'IntegralController'):
+            if rxn_type in ('Coupling', 'Transcription', 'SumReaction', 'ProportionalController', 'IntegralController'):
                 continue
             for s in rxn.input_dependence.nonzero()[0]:
                 adict[s].append(j)
         return adict
-
-
 

@@ -4,7 +4,7 @@ from Cython.Distutils import build_ext
 from numpy import get_include
 
 import sys, os
-modules_path = '../../rxndiffusion'
+modules_path = '../'
 if modules_path not in sys.path:
     sys.path.insert(0, modules_path)
 

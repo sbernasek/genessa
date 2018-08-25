@@ -118,9 +118,31 @@ cdef class cCoupling(cSpeciesDependent):
     cdef double cget_rate(self, unsigned int rxn, array states) nogil
 
 
+cdef class cTranscription:
+
+    # attributes
+    cdef unsigned int M
+    cdef array k
+    cdef array rho
+    cdef array k_m, n, alpha_ind, alpha
+    cdef array species_ind, n_active_species, species
+    cdef array rates
+
+    # methods
+    @staticmethod
+    cdef cTranscription get_blank_cTranscription()
+    @staticmethod
+    cdef cTranscription from_list(list rxns)
+    cdef double evaluate_term(self, unsigned int index, array states) nogil
+    cdef double get_species_activity(self, unsigned int rxn, array states) nogil
+    cdef double update(self, unsigned int rxn, array states) nogil
+    cdef double cget_rate(self, unsigned int rxn, array states) nogil
+
+
 ctypedef void (*cSetRate)(cRateFunction, unsigned int, array, array, array) nogil
 ctypedef void (*cSetOccupancy)(cSDRepressor, unsigned int, array) nogil
 ctypedef void (*cSetEdge)(cCoupling, unsigned int, array) nogil
+
 
 cdef class cRxnMap:
     cdef array ind, lengths, values
@@ -134,6 +156,7 @@ cdef class cRxnMap:
 cdef class cRateFunction:
     cdef cCoupling coupling
     cdef cMassAction massaction
+    cdef cTranscription transcription
     cdef cHill hill
     cdef cIController icontrol
     cdef cPController pcontrol

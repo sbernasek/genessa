@@ -556,6 +556,7 @@ class EnzymaticRepressor:
             n=js['n'])
         return repressor
 
+
 class SumReaction:
 
     def __init__(self, stoichiometry, propensity, k=1, rxn_type=None, parameters=None):
@@ -760,7 +761,143 @@ class Coupling:
         return rate
 
 
+class Transcription:
+
+    def __init__(self, stoichiometry=None, propensity=None,
+                 k=1, alpha=None, k_m=None, n=None, rho=1,
+                 rxn_type=None, parameters=None):
+        """
+        Rate law for transcriptional activation.
+
+        Parameters:
+            stoichiometry (int array) - stoichiometric coefficients
+            propensity (boolean array) - transcription factors
+            k (float) - maximum transcription rate
+            alpha (float array) - alpha coefficients
+            k_m (float array) - dissociation constants
+            n (float array) - hill coefficients
+            rxn_type (str) - type of reaction
+            parameters (dict) - parameter values
+        """
+
+        self.rxn_type = rxn_type
+
+        # compile stoichiometry as a vector of coefficients
+        if stoichiometry is None:
+            stoichiometry = [0]
+        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
+
+        # compile propensity as a boolean array
+        if propensity is None:
+            self.propensity = np.zeros(len(stoichiometry), dtype=np.int64)
+        else:
+            self.propensity = np.array(propensity, dtype=np.int64)
+
+        # set reaction parameters
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+
+        # add transcription rate constant
+        k_value, k_name = name_parameter(k, 'k')
+        if 'k' not in self.parameters.keys():
+            self.parameters['k'] = k_name
+        self.k = np.array([k_value], dtype=np.float64)
+
+        # add alpha coefficients
+        self.N_alpha = 2**self.propensity.sum()
+        if alpha is None:
+            alpha = np.ones(self.N_alpha, dtype=np.float64)
+        assert len(alpha) == self.N_alpha, "wrong length alpha"
+        self.alpha = alpha
+
+        # add dissociation constants
+        if k_m is None:
+            k_m = np.ones(self.propensity.sum(), dtype=np.float64)
+        self.k_m = k_m
+
+        # add hill coefficients
+        if n is None:
+            n = np.ones(self.propensity.sum(), dtype=np.float64)
+        self.n = n
+
+        # add rho
+        self.rho = np.array([rho], dtype=np.float64)
+
+        # define active species and inputs
+        self.active_species = np.where(self.propensity != 0)[0]
+        self.num_active_species = self.active_species.size
+
+        # predefine active species mask
+        self._propensity = self.propensity[self.active_species]
+
+        # if kinetics are zeroth order, raise flag to skip rate computation
+        self.zero_order = False
+        if self.propensity.sum() == 0:
+            self.zero_order = True
+
+        # set input dependence to None (not supported)
+        self.input_dependence = None
+
+        # assign reaction rate sensitivities
+        self.temperature_sensitive = True
+        self.atp_sensitive = True
+        self.ribosome_sensitive = False
+
+    def shift(self, shift):
+
+        s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
+        p = np.hstack((np.zeros(shift, dtype=int), self.propensity))
+
+        kw = dict(k=self.k[0],
+                  alpha=self.alpha,
+                  k_m=self.k_m,
+                  n=self.n,
+                  rho=self.rho,
+                  rxn_type=self.rxn_type,
+                  parameters=self.parameters)
+
+        return Transcription(s, p, **kw)
+
+    @staticmethod
+    def _get_activities(states, propensities):
+        return [comb(s, p, exact=True) if p > 1 else s**p for s, p in zip(states, propensities)]
+
+    # def get_rate(self, states, input_state, discrete=True):
+    #     """
+    #     Compute and return current rate of a given pathway.
+
+    #     Parameters:
+    #         states (np array) - current state values
+    #         input_state (np array) - current input value(s)
+    #         discrete (bool) - if True, use discrete propensity function
+    #     Returns:
+    #         rate (float) - rate of reaction
+    #     """
+
+    #     # NEED TO FIX ALL THIS
+
+    #     # get active states and propensities
+    #     _states = states[self.active_species]
+
+    #     # get reactant activities. if discrete, use combination functions, otherwise use continuous rate law
+    #     if discrete:
+    #         pass
+    #         #activities = self._get_activities(_states, self._propensity)
+    #     else:
+    #         pass
+    #         #activities = (_states/self.k_m)**self.n
+
+    #     # incorporate input dependence
+    #     if self.num_active_species == 0:
+    #         rate = self.k
+    #     else:
+    #         rate = self.k * functools.reduce(mul, activities)
+    #     return rate
+
+
 class RateFunction:
+
     def __init__(self, network):
         self.N = network.nodes.size
         self.M = len(network.reactions)
@@ -791,6 +928,8 @@ class RateFunction:
         for i, rxn in enumerate(self.reactions):
             rates += rxn_rates[i] * rxn.stoichiometry
         return rates
+
+
 
 
 

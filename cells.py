@@ -1,559 +1,287 @@
-from .reactions import Reaction, LinearReaction, EnzymaticReaction, EnzymaticRepressor
+from .reactions import Reaction, EnzymaticReaction, EnzymaticRepressor, Coupling, Transcription
 from .networks import MutableNetwork, Graph
-from .parameters import gene_params, dimer_params, repressor_params
+#from .parameters import gene_params, dimer_params, repressor_params
 
 import numpy as np
 import networkx as nx
+from copy import copy
 
 
-"""
-TO DO:
+class Gene:
+    """
+    System dimensions:
+        0: Gene
+        1: mRNA
+        2: Protein
+    """
+    def __init__(self, name='gene', k=1, g1=1, g2=1):
 
-1. expand print_reactions table
-2. add repressors to graph
+        self.nodes = np.arange(2)
+        self.transcripts = {name: 0}
+        self.proteins = {name: 1}
 
-"""
+        gene_name = name[0].lower()
+
+        mrna_decay = gene_name + ' decay'
+        protein_name = name.upper()
+        translation = protein_name + ' translation'
+        protein_decay = protein_name + ' decay'
+
+        # define reactions
+        self.reactions = [
+
+            # transcript decay
+            Reaction([-1, 0], [1, 0], k=g1, rxn_type=mrna_decay),
+
+            # protein synthesis/decay
+            Reaction([0, 1], [1, 0], k=k, rxn_type=translation),
+            Reaction([0, -1], [0, 1], k=g2, rxn_type=protein_decay)]
+
 
 class Cell(MutableNetwork):
-    """
-    Class inherits a mutable network to which it adds mRNA/protein identities to nodes.
+    def __init__(self, genes=(), num_inputs=1, **kwargs):
+        MutableNetwork.__init__(self, 0, inputs=num_inputs)
+        self.transcripts = {}
+        self.proteins = {}
+        self.phosphorylated = {}
 
-    Attributes:
-        name (str) - name of class type
-        unique_node_id (int) - counter for unique node numbers
-        node_key (dict) - maps state space dimension (key) to unique node id (value)
-    """
-
-    def __init__(self, coding_genes=1, non_coding_genes=0, output_node=1):
-        """
-        Inherits a network and adds mutation capabilities.
-
-        Parameters:
-            coding_genes (int) - number of transcript-protein pairs with which cell is initialized
-            non_coding_genes (int) - number of non-coding transcript species with which cell is initialized
-            output_node (int) - index of output
-        """
-
-        MutableNetwork.__init__(self, nodes=0, reactions=[], output_node=output_node)
-
-        self.transcripts = []
-        self.proteins = []
-
-        # add coding genes (first one assumed input dependent)
-        promoters, k_m = ('input',), 0.5
-        for i in range(coding_genes):
-            self.add_protein_coding_gene(promoters, k_m=k_m)
-            promoters, k_m = (), None
-
-        # add non-coding genes
-        for _ in range(non_coding_genes):
-                self.add_non_coding_gene()
+        # add genes
+        self.add_genes(genes, **kwargs)
 
     def __repr__(self):
-        """
-        Visualize graph.
-        """
-        self.show()
-        return str(type(self))
+        graph = Graph(self)
+        graph.show_reactions()
+        return ''
 
-    def show(self, **kwargs):
-        """
-        Visualize regulatory network.
-        """
-        graph = GRN(self)
-        graph.visualize_graph(**kwargs)
+    def get_ic(self, ic=None):
+        """ Get initial condition for cell. """
 
-    def to_json(self):
-        """
-        Return json-serialized cell object.
-        """
-        js = super(Cell, self).to_json()
-        js['transcripts'] = self.transcripts
-        js['proteins'] = self.proteins
-        return js
+        # if IC is none, assume all genes in ground state
+        if ic is None:
+            ic = np.zeros(self.nodes.size, dtype=np.int64)
 
-    @staticmethod
-    def from_json(js):
-        """
-        Instantiate Cell object from json-serialized dictionary.
-        """
-        cell = Cell(coding_genes=0)
+        # if IC is mean,var tuple, sample ICs from gaussian
+        elif type(ic) == tuple:
+            mean, var = ic
+            ic = np.random.normal(mean, np.sqrt(var), size=mean.size).astype(int)
+            ic[ic<0] = 0
 
-        # get each attribute from json dictionary
-        cell.output_node = js['output_node']
-        cell.nodes = np.array(js['nodes'])
-        cell.unique_node_id = js['unique_node_id']
-        cell.stoichiometry = np.array(js['stoichiometry'])
-        cell.node_key = {int(key): int(val) for key, val in js['node_key'].items()}
-        cell.reactions = [Reaction.from_json(rxn) if rxn_type=='mass_action' else EnzymaticReaction.from_json(rxn)
-                             for rxn, rxn_type in zip(js['reactions'], js['rxn_types'])]
-        cell.transcripts = js['transcripts']
-        cell.proteins = js['proteins']
+        return ic
 
-        return cell
+    def update(self):
+        self.node_key = {index: int(node_id) for index, node_id in enumerate(self.nodes)}
+        #self.compile_stoichiometry()
+        #self.resize_inputs()
 
-    def add_species(self, gamma, **kwargs):
-        """
-        Add new species to cell.
+    def add_genes(self, names, **kwargs):
+        for name in names:
+            self.add_gene(name=name, **kwargs)
 
-        Parameters:
-            gamma (float) - degradation rate constant
-            kwargs - keyword arguments for various rate scaling sensitivities
+    def add_gene(self, **kwargs):
 
-        Returns:
-            species_id (int) - unique id of new species
-        """
+        gene = Gene(**kwargs)
 
-        # get species id
-        species_id = self.unique_node_id
+        # update nodes and reactions
+        shift = self.nodes.size
+        added_node_ids = np.arange(shift, shift+gene.nodes.size)
+        self.update_reaction_dimensions(added_node_ids=added_node_ids)
 
-        # add new node to network
-        self.add_nodes(additions=1)
+        # add new nodes
+        self.nodes = np.append(self.nodes, added_node_ids)
+        self.reactions.extend([rxn.shift(shift) for rxn in gene.reactions])
 
-        # add degradation
-        if gamma > 0:
-            stoichiometry = np.zeros(self.nodes.size)
-            stoichiometry[-1] = -1
-            input_dependence = np.zeros(self.input_size)
-            degradation = LinearReaction(stoichiometry=stoichiometry, k=gamma, input_dependence=input_dependence, **kwargs)
-            self.reactions.append(degradation)
+        # update dictionaries
+        self.transcripts.update({k: v+shift for k,v in gene.transcripts.items()})
+        self.proteins.update({k: v+shift for k,v in gene.proteins.items()})
+        self.update()
 
-        return species_id
+    def add_phosphorylation(self, base, kf=1., Kf=1., kr=1., Kr=1., g=0., name=None):
 
-    def add_promoter(self, gene, promoters=(), k_transcription=None, k_m=None, hill=None, baseline=None):
-        """
-        Add enzymatic transcription reaction.
+        # update nodes and reactions
+        node_id = self.nodes.size
+        added_node_ids = np.arange(node_id, node_id+1)
+        self.update_reaction_dimensions(added_node_ids=added_node_ids)
 
-        Parameters:
-            gene (int) - index of mrna being transcribed
-            promoters (array like) - list of indices of promoters
-            k_transcription, k_m, hill (float) - maximal transcription rate, michaelis constant, and hill coefficient
-            baseline (float) - baseline transcription rate in absence of promoter
-        """
+        # add new nodes
+        self.nodes = np.append(self.nodes, added_node_ids)
 
-        # compile stoichiometric vector
-        stoichiometry = np.zeros(self.nodes.size)
-        stoichiometry[gene] = 1
+        # update dictionaries
+        if name is None:
+            name = 'p'+base
+        self.proteins.update({name: node_id})
+        self.phosphorylated.update({base: node_id})
 
-        # parse promoters
-        propensity, input_dependence = np.zeros(self.nodes.size), np.zeros(self.input_size)
-        for promoter in promoters:
-            if type(promoter) == str:
-                if '_' in promoter:
-                    input_dependence[int(promoter.split('_')[-1])] = 1
-                else:
-                    input_dependence[0] = 1
-            else:
-                propensity[promoter] += 1
+        # add forward reaction
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[self.proteins[base]] = -1
+        stoichiometry[node_id] = 1
+        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity[self.proteins[base]] = 1
+        activation_name = base.upper() + ' phosphorylation'
+        activation = EnzymaticReaction(stoichiometry, propensity, None, k=kf, k_m=Kf, rxn_type=activation_name)
 
-        # get rate constants
-        p = gene_params(k_transcription=k_transcription, k_m=k_m, hill=hill, baseline=baseline)
+        # add reverse reaction
+        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity[node_id] = 1
+        deactivation_name = name + ' dephosphorylation'
+        deactivation = EnzymaticReaction(-stoichiometry, propensity, None, k=kr, k_m=Kr, rxn_type=deactivation_name)
 
-        # add enzymatic reaction to network
-        transcription = EnzymaticReaction(stoichiometry=stoichiometry,
-                                          propensity=propensity,
-                                          input_dependence=input_dependence,
-                                          rate_constant=p.k_transcription, k_m=p.k_m, hill=p.hill, baseline=p.baseline,
-                                          rxn_type='transcription',
-                                          temperature_sensitive=True, atp_sensitive=True)
-        self.reactions.append(transcription)
+        # add decay
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[node_id] = -1
+        rxn_name = name+' decay'
+        decay = Reaction(stoichiometry, None, None, k=g, rxn_type=rxn_name)
 
-    def add_protein_coding_gene(self, promoters=(), k_transcription=None, k_m=None, hill=None, baseline=None, k_translation=None, gamma_r=None, gamma_p=None, *kwargs):
-        """
-        Add new protein-coding gene to cell.
+        # add reactions
+        rxns = [rxn for rxn in [activation, deactivation, decay] if rxn.k != 0]
+        self.reactions.extend(rxns)
+        self.update()
 
-        Parameters:
-            promoters (array like) - list of indices of promoters
-            k_transcription, k_m, n (float) - maximal transcription rate, michaelis constant, and hill coefficient
-            baseline (float) - base transcription rate in absence of promoter
-            k_translation (float) - translation rate constant
-            gamma_r, gamma_p (float) - transcript and protein degradation constants
+    def add_transcription(self, gene, factors=None, alpha=None, k_m=None, n=None, **kw):
 
-        Returns:
-            transcript_id, protein_id (int) - unique node ids of newly created species
-        """
+        # define stoichiometry
+        s = np.zeros(self.nodes.size, dtype=np.int64)
+        s[self.transcripts[gene]] = 1
 
-        # get rate constants
-        p = gene_params(k_transcription=k_transcription, k_m=k_m, hill=hill, baseline=baseline, k_translation=k_translation,
-                                           gamma_r=gamma_r, gamma_p=gamma_p)
+        # denote regulation by factors
+        p = np.zeros(self.nodes.size, dtype=np.int64)
+        if factors is not None:
+            get_index = np.vectorize(self.proteins.get)
+            indices = get_index(factors)
+            p[indices] = 1
 
-        # add mrna and protein species
-        transcript_id = self.add_species(gamma=p.gamma_r, rxn_type='transcript decay', temperature_sensitive=True)
-        self.transcripts.append(transcript_id)
-        protein_id = self.add_species(gamma=p.gamma_p, rxn_type='protein decay', temperature_sensitive=True, atp_sensitive=True)
-        self.proteins.append(protein_id)
+            sort_order = np.argsort(indices)
 
-        # add transcription reaction
-        if len(promoters) > 0:
-            self.add_promoter(transcript_id, promoters, p.k_transcription, p.k_m, p.hill, p.baseline)
+            # re-order parameters by index
+            if k_m is not None:
+                k_m = [k_m[i] for i in sort_order]
+            if n is not None:
+                n = [n[i] for i in sort_order]
 
-        # add translation
-        stoichiometry = np.zeros(self.nodes.size)
-        stoichiometry[protein_id] = 1
-        propensity = np.zeros(self.nodes.size)
-        propensity[transcript_id] = 1
-        input_dependence = np.zeros(self.input_size)
-        translation = LinearReaction(stoichiometry=stoichiometry, propensity=propensity, k=p.k_translation, rxn_type='translation', input_dependence=input_dependence,
-                               temperature_sensitive=True, atp_sensitive=True, ribosome_sensitive=True)
-        self.reactions.append(translation)
+            if alpha is not None:
+                if len(alpha) == 4:
+                    if sort_order[0] > sort_order[1]:
+                        a, b = copy(alpha[1]), copy(alpha[2])
+                        alpha[1] = b
+                        alpha[2] = a
 
-        return transcript_id, protein_id
+        # add synthesis reaction
+        name = gene + ' transcription'
+        rxn = Transcription(s, p, rxn_type=name, alpha=alpha, k_m=k_m, n=n, **kw)
+        self.reactions.append(rxn)
+        self.update()
 
-    def add_non_coding_gene(self, promoters=(), k_transcription=None, k_m=None, hill=None, baseline=None, gamma_r=None):
-        """
-        Add non-coding gene to cell.
+    def add_dimer(self, p1, p2, kf=1., kr=1., g=1., name=None):
 
-        Parameters:
-            promoters (array like) - list of indices of promoters
-            k_transcription, k_m, n (float) - maximal transcription rate, michaelis constant, and hill coefficient
-            baseline (float) - base transcription rate in absence of promoter
-            gamma_r (float) - transcript degradation rate
+        # add new node for dimer
+        if name is None:
+            name = '-'.join([p1, p2])
 
-        Returns:
-            transcript_id (int) - unique node id of newly created species
-        """
+        dimer_id = self.nodes.size
+        added_node_ids = np.arange(dimer_id, dimer_id+1)
+        self.update_reaction_dimensions(added_node_ids=added_node_ids)
+        self.nodes = np.append(self.nodes, added_node_ids)
+        self.proteins.update({name: dimer_id})
 
-        # get rate constants
-        p = gene_params(k_transcription=k_transcription, k_m=k_m, hill=hill, baseline=baseline,
-                                           gamma_r=gamma_r)
+        # get base species
+        base1, base2 = self.proteins[p1], self.proteins[p2]
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[base1] = -1
+        stoichiometry[base2] = -1
+        stoichiometry[dimer_id] = 1
+        fwd_name, rev_name = name+' association', name+' dissociation'
+        fwd = Reaction(stoichiometry, None, None, kf, rxn_type=fwd_name)
+        rev = Reaction(-stoichiometry, None, None, kr, rxn_type=rev_name)
 
-        # add mrna species
-        transcript_id = self.add_species(gamma=p.gamma_r, rxn_type='transcript decay', temperature_sensitive=True)
-        self.transcripts.append(transcript_id)
+        # add decay
+        s = np.zeros(self.nodes.size, dtype=np.int64)
+        s[dimer_id] = -1
+        decay = Reaction(s, k=g, rxn_type='{:s} decay'.format(name))
 
-        # add transcription
-        self.add_promoter(transcript_id, promoters,
-                          k_transcription=p.k_transcription, k_m=p.k_m, hill=p.hill, baseline=p.baseline)
+        # add reactions
+        rxns = [rxn for rxn in [fwd, rev, decay] if rxn.k != 0]
+        self.reactions.extend(rxns)
+        self.update()
 
-        return transcript_id
+    def add_translocation(self, base, kf=1., kr=1., g=1., name=None):
 
-    def add_dimer(self, species1, species2, reversible=True, k_association=None, k_dissociation=None, gamma=None):
-        """
-        Adds dimer as well as association/dissociation reactions.
+        # add new node for dimer
+        if name is None:
+            name = 'n'+base
 
-        Parameters:
-            species1, species2 (int) - indices of dimer subcomponents
-            reversible (bool) - if True, add reversible product to species list
-            k_association, k_dissociation (float) - rate constants for association/dissociation reactions
-            gamma (float) - degradation constant
+        node_id = self.nodes.size
+        added_node_ids = np.arange(node_id, node_id+1)
+        self.update_reaction_dimensions(added_node_ids=added_node_ids)
+        self.nodes = np.append(self.nodes, added_node_ids)
+        self.proteins.update({name: node_id})
 
-        Returns:
-            dimer_id (int) - id of newly created dimer species
-        """
+        # get base species
+        base_id = self.proteins[base]
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[base_id] = -1
+        stoichiometry[node_id] = 1
+        fwd = Reaction(stoichiometry, None, None, kf, rxn_type=base+' import')
+        rev = Reaction(-stoichiometry, None, None, kr, rxn_type=base+' export')
 
-        # get dimerization rate parameters
-        p = dimer_params(k_association=k_association, k_dissociation=k_dissociation, gamma=gamma)
+        # add decay
+        s = np.zeros(self.nodes.size, dtype=np.int64)
+        s[node_id] = -1
+        decay = Reaction(s, k=g, rxn_type='{:s} decay'.format(name))
 
-        # create dimer
-        dimer_id = None
-        if reversible:
-            dimer_id = self.add_species(gamma=p.gamma, rxn_type='dimer decay', temperature_sensitive=True, atp_sensitive=True)
+        # add reactions
+        rxns = [rxn for rxn in [fwd, rev, decay] if rxn.k != 0]
+        self.reactions.extend(rxns)
+        self.update()
 
-            # determine whether species 1 and 2 are proteins or transcripts, then add dimer to appropriate species list
-            if species1 in self.proteins and species2 in self.proteins:
-                self.proteins.append(dimer_id)
-            elif species1 in self.transcripts and species2 in self.transcripts:
-                self.transcripts.append(dimer_id)
-            else:
-                raise ValueError('Species are not recognize or are of conflicting type.')
+    def add_transcript_degradation(self, actuator, target, k=1., Kd=1.):
 
-        # compile stoichiometry for forward and reverse reactions
-        association_stoichiometry = np.zeros(self.nodes.size)
-        if reversible:
-            association_stoichiometry[dimer_id] += 1
-        for component in (species1, species2):
-            association_stoichiometry[component] -= 1
-        dissociation_stoichiometry = -1 * association_stoichiometry
+        # create reaction for target
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[self.transcripts[target]] = -1
+        propensity = np.zeros(self.nodes.size, dtype=np.int64)
 
-        # add association/dissociation reactions to network
-        association = Reaction(stoichiometry=association_stoichiometry, k=p.k_association, rxn_type='association', temperature_sensitive=True)
-        dissociation = Reaction(stoichiometry=dissociation_stoichiometry, k=p.k_dissociation, rxn_type='dissociation', temperature_sensitive=True)
-        if reversible:
-            self.reactions.extend([association, dissociation])
+        # determine input dependence
+        if 'IN' not in actuator:
+            input_dependence = None
+            propensity[self.transcripts[actuator]] = 1
         else:
-            self.reactions.append(association)
-
-        return dimer_id
-
-    def add_transcriptional_repressor(self, repressor, target, k_m=None, hill=None):
-        """
-        Adds transcriptional repressor to all reactions enzymatically synthesizing the specified target.
-
-        Parameters:
-            repressor (int) - substrate acting to repress transcription
-            target (int) - gene under repression
-            k_m (float) - michaelis constant
-            hill (float) - hill coefficient
-        """
-
-        # get repressor parameters
-        p = repressor_params(k_m=k_m, hill=hill)
-
-        # determine substrate weights
-        propensity = np.zeros(self.nodes.size)
-        if type(repressor) == str:
-            input_dependence = np.zeros(self.input_size)
-            if '_' in repressor:
-                input_dependence[int(repressor.split('_')[-1])] = 1
+            if '_' in actuator:
+                input_dependence = np.zeros(self.input_size, dtype=float)
+                input_dependence[int(actuator.split('_')[-1])] = 1
             else:
-                input_dependence[0] = 1
+                input_dependence = 1
+
+        # add reverse reaction
+        rxn = EnzymaticReaction(stoichiometry, propensity, input_dependence, k=k, k_m=Kd, rxn_type=target+' transcript deg.')
+        self.reactions.append(rxn)
+        self.update()
+
+    def add_protein_degradation(self, actuator, target, k=1., Kd=1., modulation=None):
+
+        # create reaction for target
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[self.proteins[target]] = -1
+        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        rxn_name = target+'  deg.'
+
+        # determine input dependence
+        if 'IN' not in actuator:
+            input_dependence = None
+            propensity[self.proteins[actuator]] = 1
         else:
-            input_dependence = 0
-            propensity[repressor] = 1
+            if '_' in actuator:
+                input_dependence = np.zeros(self.input_size, dtype=float)
+                input_dependence[int(actuator.split('_')[-1])] = 1
+            else:
+                input_dependence = 1
 
-        # instantiate repressor
-        repression = EnzymaticRepressor(propensity=propensity, input_dependence=input_dependence, k_m=p.k_m, hill=p.hill)
+        # add input rate modifier
+        rate_modifier = None
+        if modulation is not None:
+            rate_modifier = np.zeros(self.input_size, dtype=float)
+            rate_modifier[modulation[0]] = modulation[1]
 
-        # add repression to any reaction in which the target is enzymatically synthesized
-        for enzymatic_rxn in [rxn for rxn in self.reactions if type(rxn) == EnzymaticReaction]:
-            if enzymatic_rxn.stoichiometry[target] > 0:
-                enzymatic_rxn.add_repressor(repression)
-
-    def add_sequential_proteins(self, actuator, n=1, **kwargs):
-        """
-        Creates sequential cascade of protein synthesis via transcription-translation.
-
-        Parameters:
-            actuator (int) - index of protein initiating cascade
-            n (int) - cascade length
-            kwargs (dict) - rate parameters for intermediate gene expression
-
-        Returns:
-            sensor (int) - index of sensor at the end of the cascade
-        """
-
-        # create intermediates
-        for stage in range(n):
-            _, actuator = self.add_protein_coding_gene(promoters=(actuator,), **kwargs)
-
-        return actuator
-
-    def add_transcriptional_feedback(self, sensor=None, target=None, intermediates=0, k_m=None, hill=None):
-        """
-        Adds feedback loop imparting transcriptional repression.
-
-        Parameters:
-            sensor (int) - index of species whose level is measured
-            target (int) - index of transcript whose synthesis is repressed
-            intermediates (int) - number of intermediate gene-synthesis stages
-            k_m, hill (float, float) - repressor michaelis constant and hill coefficient
-        """
-
-        # assume sensor is first protein if none specified
-        if sensor is None:
-            sensor = self.proteins[0]
-
-        # assume target is first transcript if none specified
-        if target is None:
-            target = self.transcripts[0]
-
-        # create intermediate signaling cascade
-        actuator = self.add_sequential_proteins(sensor, intermediates)
-
-        # implement transcriptional repression
-        self.add_transcriptional_repressor(actuator, target, k_m=k_m, hill=hill)
-
-    def add_post_transcriptional_feedback(self, sensor=None, target=None, intermediates=0, rate_constant=None, intermediate_kwargs={}):
-        """
-        Adds feedback loop imparting post-transcriptional repression via an mRNA-dimerization mechanism.
-
-        Parameters:
-            sensor (int) - index of species whose level is measured
-            target (int) - index of target transcript
-            intermediates (int) - number of intermediate gene-synthesis stages
-            rate_constant (float) - rate of dimerization
-            intermediate_kwargs (dict) - rate parameters for intermediate gene expression
-        """
-
-        # assume sensor is first protein if none specified
-        if sensor is None:
-            sensor = self.proteins[0]
-
-        # assume target is first transcript if none specified
-        if target is None:
-            target = self.transcripts[0]
-
-        # create intermediate signaling cascade
-        actuator = self.add_sequential_proteins(sensor, intermediates, **intermediate_kwargs)
-
-        # creates noncoding miRNA
-        actuator = self.add_non_coding_gene(promoters=(actuator,))
-
-        # implement antithetical destruction
-        _ = self.add_dimer(target, actuator, reversible=False, k_association=rate_constant, k_dissociation=0)
-
-    def add_post_translational_feedback(self, target=None, reversible=False, intermediates=1, rate_constant=None):
-        """
-        Adds feedback loop imparting post-translational repression via a dimerization mechanism.
-
-        Parameters:
-            target (int) - index of controlled protein
-            reversible (bool) - if True, add a reversible dimer species
-            intermediates (int) - number of intermediate gene-synthesis stages
-            rate_constant (float) - rate of dimerization
-        """
-
-        # assume target is first protein if none specified
-        if target is None:
-            target = self.proteins[0]
-
-        # create intermediate signaling cascade
-        actuator = self.add_sequential_proteins(target, intermediates)
-
-        # implement dimerization
-        _ = self.add_dimer(target, actuator, reversible=reversible, k_association=rate_constant, k_dissociation=0)
-
-    def add_catalytic_post_translational_feedback(self, target=None, intermediates=0, vmax=None, k_m=None, hill=None):
-        """
-        Adds feedback loop imparting post-translational repression via a catalytic degradation mechanism.
-
-        Parameters:
-            target (int) - index of controlled protein
-            intermediates (int) - number of intermediate gene-synthesis stages
-            vmax, k_m, hill (float) - catalytic degradation rate constants
-        """
-
-        # assume target is first protein if none specified
-        if target is None:
-            target = self.proteins[0]
-
-        # create intermediate signaling cascade
-        actuator = self.add_sequential_proteins(target, intermediates)
-
-        # create catalytic degradation reaction
-        stoichiometry = np.zeros(self.nodes.size)
-        stoichiometry[target] = -1
-        propensity = np.zeros(self.nodes.size)
-        propensity[actuator] = 1
-
-        # get reaction parameters
-        p = repressor_params(vmax=vmax, k_m=k_m, hill=hill)
-
-        # add catalytic degradation reaction
-        catalytic_degradation = EnzymaticReaction(stoichiometry=stoichiometry, propensity=propensity,
-                 rate_constant=p.vmax, k_m=p.k_m, hill=p.hill, baseline=0, rxn_type='enzymatic degradation',
-                 temperature_sensitive=True)
-        self.reactions.append(catalytic_degradation)
-
-    def add_catalytic_degradation(self, actuator=None, target=None, vmax=None, k_m=None, hill=None):
-        """
-        Adds feedback loop imparting post-translational repression via a catalytic degradation mechanism.
-
-        Parameters:
-            actuator (int) - index of catalytic species
-            target (int) - index of controlled protein
-            vmax, k_m, hill (float) - catalytic degradation rate constants
-        """
-
-        # assume target is first protein if none specified
-        if target is None:
-            target = self.proteins[0]
-
-        # create catalytic degradation reaction
-        stoichiometry = np.zeros(self.nodes.size)
-        stoichiometry[target] = -1
-        propensity = np.zeros(self.nodes.size)
-        propensity[actuator] = 1
-
-        # get reaction parameters
-        p = repressor_params(vmax=vmax, k_m=k_m, hill=hill)
-
-        # add catalytic degradation reaction
-        catalytic_degradation = EnzymaticReaction(stoichiometry=stoichiometry, propensity=propensity,
-                 rate_constant=p.vmax, k_m=p.k_m, hill=p.hill, baseline=0, rxn_type='enzymatic degradation',
-                 temperature_sensitive=True)
-        self.reactions.append(catalytic_degradation)
-
-    def add_linear_feedback(self, sensor, target, rate_constant=None, **kwargs):
-        """
-        Adds linear negative feedback applied to mRNA level.
-
-        Parameters:
-            sensor (int) - index of species whose level is measured
-            target (int) - index of target species
-            rate_constant (float) - feedback strength
-            kwargs - rate sensitivity to environmental conditions
-        """
-
-        # determine stoichiometry and propensity
-        stoichiometry, propensity = np.zeros(len(self.nodes)), np.zeros(len(self.nodes))
-        stoichiometry[target] = -1
-        propensity[sensor] = 1
-
-        # set parameters
-        p = repressor_params(k_linear=rate_constant)
-
-        # add feedback reaction
-        feedback = LinearReaction(stoichiometry=stoichiometry, propensity=propensity, k=p.k_linear, rxn_type='linear feedback', **kwargs)
-        self.reactions.append(feedback)
-
-
-class GRN(Graph):
-    """
-    Class inherits graph object and adds transcript/protein labels to provide topological view of an individual cell's
-    gene regulatory network.
-
-    Attributes:
-        output_node (int) - index of output node
-        nodes (np array) - vector of node indices
-        reactions (list) - list of reaction objects
-        stoichiometry (np array) - N x M matrix of stoichiometric coefficients
-        node_key (dict) - maps state space dimension (key) to unique node id (value)
-        transcripts (array like) - transcript ids
-        proteins (array like) - protein ids
-        edge_list (list) - list of edges, each defined as a (from, to, edge_dict) tuple
-        up_edges (dict) - up-regulating edges in which keys are (from, to) tuples, values are edge weights
-        down_edges (dict) - down-regulating edges in which keys are (from, to) tuples, values are edge weights
-        graph (Networkx MultiDiGraph)
-    """
-
-    def __init__(self, cell):
-        """
-        Inherits a cell then compiles a GRN-edge list and creates a networkx graph object.
-
-        Parameters:
-            cell (Cell object)
-        """
-        self.transcripts = cell.transcripts
-        self.proteins = cell.proteins
-        Graph.__init__(self, cell)
-        self.graph = self.create_graph()
-
-        # node colors
-        self.node_colors = {
-            'input': (155/256, 220/256, 150/256), # green
-            'gene': (238/256, 167/256, 246/256), # purple
-            'transcript': (138/256, 201/256, 228/256), # blue
-            'protein': (206/256, 111/256, 111/256)} # red
-
-    def create_graph(self):
-        """
-        Generates Networkx object of network topology.
-
-        Returns:
-            graph (Networkx MultiDiGraph)
-        """
-
-        # if network has no edges, abort
-        if len(self.edge_list) == 0:
-            print('Network has no edges.')
-
-        # create directed graph with multiple parallel edges
-        graph = nx.MultiDiGraph()
-
-        # add nodes
-        graph.add_nodes_from(['IN_'+str(input_dim) for input_dim in range(self.input_size)], node_type='input')
-
-        #graph.add_node(self.output_node, node_type='input/output')
-        graph.add_nodes_from([node for node in self.nodes if node not in self.transcripts + self.proteins], node_type='gene')
-        graph.add_nodes_from(self.transcripts, node_type='transcript')
-        graph.add_nodes_from(self.proteins, node_type='protein')
-
-        #graph.add_nodes_from([node for node in self.proteins if node != self.output_node], node_type='protein')
-
-        # add edges
-        for edge in self.edge_list:
-            graph.add_edge(edge[0], edge[1], weight=edge[2]['weight'])
-
-        return graph
-
+        # add reverse reaction
+        rxn = EnzymaticReaction(stoichiometry, propensity, input_dependence, k=k, k_m=Kd, rxn_type=rxn_name, rate_modifier=rate_modifier)
+        self.reactions.append(rxn)
+        self.update()
