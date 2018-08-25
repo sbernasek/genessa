@@ -59,7 +59,7 @@ cdef class cSDRepressor(cSpeciesDependent):
 
     # methods
     @staticmethod
-    cdef cSDRepressor get_blank_cSDRepressor()
+    cdef cSDRepressor get_blank_cSDRepressor(unsigned int M)
     @staticmethod
     cdef cSDRepressor from_list(list rxns, dict rxn_map)
     cdef double get_species_activity(self, unsigned int rep, array states) nogil
@@ -108,7 +108,7 @@ cdef class cCoupling(cSpeciesDependent):
 
     # methods
     @staticmethod
-    cdef cCoupling get_blank_cCoupling()
+    cdef cCoupling get_blank_cCoupling(unsigned int M)
     @staticmethod
     cdef cCoupling from_list(list rxns, dict edge_map, dict repressor_map)
     cdef double get_availability(self, unsigned int rxn, array states) nogil
@@ -148,7 +148,8 @@ cdef class cRateFunction:
     cdef void update_input(self, array states, array inputs, array cumul, unsigned int dim) nogil
     cdef void update(self, array states, array inputs, array cumul, unsigned int fired) nogil
     cdef void update_all(self, array states, array inputs, array cumul) nogil
-    cdef void cupdate(self, array states, array inputs, array cumul) nogil
+    #cdef void cupdate(self, array states, array inputs, array cumul) nogil
+    cpdef void cupdate(self, array states, array inputs, array cumul) with gil
     cpdef array cget_rxn_rates(self, array states, array inputs, array cumul)
 
 

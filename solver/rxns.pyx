@@ -363,7 +363,7 @@ cdef class cMassAction(cInputDependent):
         # integrate input activity
         index = self.inputs_ind.data.as_uints[rxn]
         for count in xrange(I):
-            ind = self.species.data.as_uints[index]
+            ind = self.inputs.data.as_uints[index]
             value = input_values.data.as_doubles[ind]
             n = self.input_dependence.data.as_doubles[index]
             activity *= (value**n)
@@ -391,10 +391,11 @@ cdef class cSDRepressor(cSpeciesDependent):
         self.occupancies = array('d', np.zeros(M, dtype=np.float64))
 
     @staticmethod
-    cdef cSDRepressor get_blank_cSDRepressor():
+    cdef cSDRepressor get_blank_cSDRepressor(unsigned int M):
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
-        return cSDRepressor(0, xf, xf, xl, xl, xf, {0:[]})
+        cdef dict rxn_map = {i: [] for i in xrange(M)}
+        return cSDRepressor(0, xf, xf, xl, xl, xf, rxn_map)
 
     @staticmethod
     cdef cSDRepressor from_list(list rxns, dict rxn_map):
@@ -410,7 +411,7 @@ cdef class cSDRepressor(cSpeciesDependent):
         # if there are no repressors, return empty arrays
         M = len(reps)
         if M == 0:
-            return cSDRepressor.get_blank_cSDRepressor()
+            return cSDRepressor.get_blank_cSDRepressor(len(rxn_map))
 
         # get parameters
         k_m = np.array([rxn.k_m for rxn in reps], dtype=np.float64)
@@ -594,7 +595,7 @@ cdef class cIDRepressor(cInputDependent):
         # integrate input activity
         index = self.inputs_ind.data.as_uints[rep]
         for count in xrange(I):
-            ind = self.species.data.as_uints[index]
+            ind = self.inputs.data.as_uints[index]
             value = input_values.data.as_doubles[ind]
             coefficient = self.input_dependence.data.as_doubles[index]
             activity += (value*coefficient)
@@ -760,7 +761,7 @@ cdef class cHill(cIDRepressor):
         # integrate input activity
         index = self.inputs_ind.data.as_uints[rxn]
         for count in xrange(I):
-            ind = self.species.data.as_uints[index]
+            ind = self.inputs.data.as_uints[index]
             value = input_values.data.as_doubles[ind]
             coefficient = self.input_dependence.data.as_doubles[index]
             activity += (value*coefficient)
@@ -813,11 +814,13 @@ cdef class cCoupling(cSpeciesDependent):
         self.activity = array('l', np.zeros(M, dtype=np.int64))
 
     @staticmethod
-    cdef cCoupling get_blank_cCoupling():
+    cdef cCoupling get_blank_cCoupling(unsigned int M):
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
-        cdef cSDRepressor rep = cSDRepressor.get_blank_cSDRepressor()
-        return cCoupling(0, xf, xf, xl, xl, xf, rep, xl, {0:[]})
+        cdef cSDRepressor rep = cSDRepressor.get_blank_cSDRepressor(M)
+        cdef int i
+        cdef dict rxn_map = {i: [] for i in xrange(M)}
+        return cCoupling(0, xf, xf, xl, xl, xf, rep, xl, rxn_map)
 
     @staticmethod
     cdef cCoupling from_list(list rxns, dict edge_map, dict repressor_map):
@@ -831,7 +834,7 @@ cdef class cCoupling(cSpeciesDependent):
         # if no reactions of this type, add blank
         M = len(rxns)
         if M == 0:
-            return cCoupling.get_blank_cCoupling()
+            return cCoupling.get_blank_cCoupling(len(edge_map))
 
         # add species dependence
         species_ind = np.cumsum([0]+[rxn.num_active_species for rxn in rxns]).astype(np.uint32)
@@ -985,16 +988,16 @@ cdef class cRxnMap:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef void app_rep(self, cSDRepressor rep_obj, unsigned int key, cSetOccupancy f,
-                  array states) nogil:
+    cdef void app_rep(self, cSDRepressor rep_obj, unsigned int key, cSetOccupancy f, array states) nogil:
         cdef unsigned int count, rep
         cdef unsigned int length = self.lengths.data.as_uints[key]
         cdef unsigned int index = self.ind.data.as_uints[key]
 
-        for count in xrange(length):
-            rep = self.values.data.as_uints[index]
-            f(rep_obj, rep, states)
-            index += 1
+        if length != 0:
+            for count in xrange(length):
+                rep = self.values.data.as_uints[index]
+                f(rep_obj, rep, states)
+                index += 1
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -1003,10 +1006,11 @@ cdef class cRxnMap:
         cdef unsigned int length = self.lengths.data.as_uints[key]
         cdef unsigned int index = self.ind.data.as_uints[key]
 
-        for count in xrange(length):
-            edge = self.values.data.as_uints[index]
-            f(coupling_obj, edge, states)
-            index += 1
+        if length != 0:
+            for count in xrange(length):
+                edge = self.values.data.as_uints[index]
+                f(coupling_obj, edge, states)
+                index += 1
 
 
 cdef class cRateFunction:
@@ -1108,7 +1112,7 @@ cdef class cRateFunction:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef void cupdate(self, array states, array inputs, array cumul) nogil:
+    cpdef void cupdate(self, array states, array inputs, array cumul) with gil:
         """ Update all reaction rates using continuous rate functions. """
 
         cdef unsigned int rxn
@@ -1281,8 +1285,9 @@ class RateFunction:
         adict = {i: [] for i in range(len(network.reactions))}
         for (i, rxn) in enumerate(network.reactions):
             list_of_lists = [p_dict[s] for s in rxn.stoichiometry.nonzero()[0]]
-            alist = reduce(add, list_of_lists)
-            adict[i].extend(alist)
+            if len(list_of_lists) > 0:
+                alist = reduce(add, list_of_lists)
+                adict[i].extend(alist)
 
         # remove duplicates
         for (k, v) in adict.items():

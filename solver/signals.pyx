@@ -56,6 +56,7 @@ cdef class cSquarePulse(cSignal):
     """ Class defines a single channel square pulse signal. """
 
     def __init__(self, t_on=0., t_off=3., off=0, on=1):
+        cSignal.__init__(self, value=off)
         self.t_on = t_on
         self.t_off = t_off
         self.off = array('d', np.array([off], dtype=np.float64).flatten())
