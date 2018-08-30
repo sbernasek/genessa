@@ -39,6 +39,7 @@ class Gene:
 
 
 class Cell(MutableNetwork):
+
     def __init__(self, genes=(), num_inputs=1, **kwargs):
         MutableNetwork.__init__(self, 0, inputs=num_inputs)
         self.transcripts = {}
@@ -137,37 +138,19 @@ class Cell(MutableNetwork):
         self.reactions.extend(rxns)
         self.update()
 
-    def add_transcription(self, gene, factors=None, alpha=None, k_m=None, n=None, **kw):
+    def add_transcription(self, gene, modules=None, k=1, alpha=None, perturbed=False, **kw):
 
         # define stoichiometry
         s = np.zeros(self.nodes.size, dtype=np.int64)
         s[self.transcripts[gene]] = 1
 
-        # denote regulation by factors
-        p = np.zeros(self.nodes.size, dtype=np.int64)
-        if factors is not None:
-            get_index = np.vectorize(self.proteins.get)
-            indices = get_index(factors)
-            p[indices] = 1
-
-            sort_order = np.argsort(indices)
-
-            # re-order parameters by index
-            if k_m is not None:
-                k_m = [k_m[i] for i in sort_order]
-            if n is not None:
-                n = [n[i] for i in sort_order]
-
-            if alpha is not None:
-                if len(alpha) == 4:
-                    if sort_order[0] > sort_order[1]:
-                        a, b = copy(alpha[1]), copy(alpha[2])
-                        alpha[1] = b
-                        alpha[2] = a
+        # # define input dependence
+        # if input_dependence is None:
+        #     input_dependence = np.zeros(self.input_size, dtype=np.float64)
 
         # add synthesis reaction
         name = gene + ' transcription'
-        rxn = Transcription(s, p, rxn_type=name, alpha=alpha, k_m=k_m, n=n, **kw)
+        rxn = Transcription(s, modules, k=k, alpha=alpha, perturbed=perturbed, rxn_type=name, **kw)
         self.reactions.append(rxn)
         self.update()
 

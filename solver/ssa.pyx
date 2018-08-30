@@ -56,7 +56,7 @@ cdef class cNetwork:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    cdef void cset_species_rates(self, array states, array inputs, array cumul, array rates) nogil:
+    cdef void cset_species_rates(self, array states, array inputs, array cumul, array rates):
 
         cdef unsigned int rxn
         cdef double rxn_rate
@@ -228,6 +228,7 @@ cdef class cSolver:
                 t_index += 1
                 #self.set_rxn_order(self.network.R.rates)
 
+            # update input value
             if self.null_input == 0:
 
                 # update input value

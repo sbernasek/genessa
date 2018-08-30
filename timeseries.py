@@ -104,17 +104,23 @@ class TimeSeries():
         trajectory = np.percentile(self.states[:, dim, :], q=percentile, axis=0)
         return trajectory
 
-    def plot_samples(self, ax=None, dims=None, time_scaling=1, colors=None, mean=False):
+    def plot(self, dims=None, samples=True, mean=False, interval=False,
+             colors=None, ax=None):
         """
-        Plot all monte carlo samples from a specified dimension.
+        Plot time series from a specified dimension.
 
         Parameters:
-            ax (axes object) - if None, create one
             dims (list) - dimensions of state space to be plotted
-            time_scaling (float) - hours per unit time
-            color (str) - color of confidence interval
-            mean (bool) - if True, plot mean
+            samples (bool) - if True, plot individual trajectories
+            mean (bool) - if True, plot mean trajectory
+            interval (bool) - if True, plot SEM
+            colors (list) - colors for each dimension
+            ax (axes object) - if None, create one
         """
+
+        # if no dimension specified, select highest
+        if dims is None:
+            dims = (self.states.shape[1] - 1,)
 
         # define color cycle
         if colors is None:
@@ -124,10 +130,6 @@ class TimeSeries():
         if ax is None:
             fig, ax = plt.subplots(figsize=(4, 3))
 
-        # if no dimension specified, select highest
-        if dims is None:
-            dims = (self.states.shape[1] - 1,)
-
         # iterate across all specified dimensions
         for i, dim in enumerate(dims):
 
@@ -135,13 +137,23 @@ class TimeSeries():
 
             # add trajectories to plot
             if self.states is None:
-                raise AttributeError('Cannot plot samples because no trajectory data are available.')
-            for trajectory in self.states[:, dim, :]:
-                ax.plot(self.t*time_scaling, trajectory, '-', color=color, linewidth=1, alpha=0.5)
+                raise AttributeError('Trajectory data not available.')
 
-            # add mean to plot
-            if mean is True:
-                ax.plot(self.t*time_scaling, self.mean[dim, :], '-', color=color, linewidth=1, alpha=1)
+            # plot samples
+            if samples:
+                for trajectory in self.states[:, dim, :]:
+                    ax.plot(self.t, trajectory, '-', color=color, lw=1, alpha=0.5)
+
+            # plot SEM interval
+            if interval:
+                sem = self.var[dim, :]/self.states.shape[0]
+                lbound = self.mean[dim, :] - sem
+                ubound = self.mean[dim, :] + sem
+                ax.fill_between(self.t, lbound, ubound, color=color, alpha=0.5)
+
+            # plot mean
+            if mean:
+                ax.plot(self.t, self.mean[dim, :], '-', color=color, lw=1, alpha=1)
 
         # set ylim
         ymax = np.max(self.states[:, np.array(dims), :])

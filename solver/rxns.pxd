@@ -1,5 +1,11 @@
 from cpython.array cimport array
 
+cdef inline unsigned int get_binary_repr_size(unsigned int x) nogil:
+        """ Get highest dimension of binary representation. """
+        cdef unsigned int n = 0
+        while x // (2**(n+1)) > 0:
+            n += 1
+        return n + 1
 
 cdef class cSpeciesDependent:
     cdef unsigned int M
@@ -118,29 +124,69 @@ cdef class cCoupling(cSpeciesDependent):
     cdef double cget_rate(self, unsigned int rxn, array states) nogil
 
 
+cdef class cRegulatoryModule:
+
+    # attributes
+    cdef unsigned int M
+    cdef array nA
+    cdef array nD
+    cdef array bindsAsComplex
+    cdef array k
+    cdef array n
+    cdef array species_ind
+    cdef array species
+    cdef array n_active_species
+    cdef array xi
+    cdef array activation
+    cdef cRxnMap rxn_map
+
+    # methods
+    @staticmethod
+    cdef cRegulatoryModule get_blank_cRegulatoryModule(unsigned int M)
+    @staticmethod
+    cdef cRegulatoryModule from_list(list rxns, dict rxn_map)
+    cdef double set_fractional_activation(self, unsigned int mod, array states) nogil
+    cdef void set_activation(self, unsigned int mod, array states) nogil
+    cdef double get_activation(self, unsigned int mod) nogil
+    cdef void update(self, array states, unsigned int fired) nogil
+    cdef double cget_activation(self, array states, unsigned int mod) nogil
+
+
 cdef class cTranscription:
 
     # attributes
     cdef unsigned int M
     cdef array k
-    cdef array rho
-    cdef array k_m, n, alpha_ind, alpha
-    cdef array species_ind, n_active_species, species
+    cdef array alpha
+    cdef array alpha_wt
+    cdef array alpha_ind
+    cdef array num_alpha
+    cdef cRegulatoryModule modules_obj
+    cdef array modules_ind
+    cdef array num_modules
     cdef array rates
+    cdef array inputs_ind
+    cdef array num_inputs
+    cdef array inputs
+    cdef array input_dependence
 
     # methods
     @staticmethod
     cdef cTranscription get_blank_cTranscription()
     @staticmethod
-    cdef cTranscription from_list(list rxns)
-    cdef double evaluate_term(self, unsigned int index, array states) nogil
-    cdef double get_species_activity(self, unsigned int rxn, array states) nogil
-    cdef double update(self, unsigned int rxn, array states) nogil
-    cdef double cget_rate(self, unsigned int rxn, array states) nogil
+    cdef cTranscription from_list(list rxns, dict rxn_map)
+    cdef double apply_perturbation(self, unsigned int rxn, double ptb) nogil
+    cdef double remove_perturbation(self, unsigned int rxn) nogil
+    cdef double get_activation(self, unsigned int rxn, array states) nogil
+    cdef double get_rate_modifier(self, unsigned int rxn, array input_values) nogil
+    cdef double update(self, unsigned int rxn, array states, array input_values) nogil
+    cdef double cget_rate(self, unsigned int rxn, array states, array input_values) nogil
 
 
 ctypedef void (*cSetRate)(cRateFunction, unsigned int, array, array, array) nogil
+ctypedef void (*cPerturb)(cRateFunction, unsigned int, double) nogil
 ctypedef void (*cSetOccupancy)(cSDRepressor, unsigned int, array) nogil
+ctypedef void (*cSetActivation)(cRegulatoryModule, unsigned int, array) nogil
 ctypedef void (*cSetEdge)(cCoupling, unsigned int, array) nogil
 
 
@@ -149,7 +195,9 @@ cdef class cRxnMap:
 
     # methods
     cdef void app(self, cRateFunction rf, unsigned int key, cSetRate f, array states, array inputs, array cumul) nogil
+    cdef void app_ptb(self, cRateFunction rf, unsigned int key, cPerturb f, double ptb) nogil
     cdef void app_rep(self, cSDRepressor rep_obj, unsigned int key, cSetOccupancy f, array states) nogil
+    cdef void app_mod(self, cRegulatoryModule mod_obj, unsigned int key, cSetActivation f, array states) nogil
     cdef void app_coup(self, cCoupling coupling_obj, unsigned int key, cSetEdge f, array states) nogil
 
 
@@ -163,11 +211,12 @@ cdef class cRateFunction:
     cdef unsigned int M
     cdef array rxn_types, rxn_keys, rates
     cdef double total_rate
-    cdef cRxnMap rxn_map, input_map
+    cdef cRxnMap rxn_map, input_map, ptb_map
 
     # methods
     cdef double evaluate(self, unsigned int rxn, array states, array inputs, array cumul) nogil
     cdef void set_rate(self, unsigned int rxn, array states, array inputs, array cumul) nogil
+    cdef void apply_perturbation(self, unsigned int rxn, double ptb) nogil
     cdef void update_input(self, array states, array inputs, array cumul, unsigned int dim) nogil
     cdef void update(self, array states, array inputs, array cumul, unsigned int fired) nogil
     cdef void update_all(self, array states, array inputs, array cumul) nogil
