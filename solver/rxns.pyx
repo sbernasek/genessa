@@ -1295,10 +1295,11 @@ cdef class cTranscription:
             p = 1
             for j in xrange(num_modules):
                 factivation = self.modules_obj.get_activation(mod_index+j)
-                if microstate_size-j-1 >= 0 and i%2 == 1:
+                if microstate_size-j-1 >= 0 and ((i >> j) & 1) == 1:
                     p *= factivation
                 else:
                     p *= (1-factivation)
+
             alpha = self.alpha.data.as_doubles[alpha_index+i]
             activation += (alpha * p)
 
@@ -1327,7 +1328,9 @@ cdef class cTranscription:
     @cython.wraparound(False)
     cdef double update(self, unsigned int rxn, array states, array input_values) nogil:
         """ Update rate of specified reaction. """
-        return self.cget_rate(rxn, states, input_values)
+        cdef double k = self.k.data.as_doubles[rxn]
+        cdef double activation = self.get_activation(rxn, states)
+        return k * activation
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -1336,6 +1339,7 @@ cdef class cTranscription:
         cdef double k = self.k.data.as_doubles[rxn]
         cdef double activation = self.get_activation(rxn, states)
         #cdef double modifier = self.get_rate_modifier(rxn, input_values)
+
         return k * activation
 
 
