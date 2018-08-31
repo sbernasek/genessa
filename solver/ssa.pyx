@@ -1,15 +1,15 @@
 # cython: profile=False
 
-from rxndiffusion.solver.cyRNG import cyRNG
-from rxndiffusion.solver.rxns import RateFunction
-from rxndiffusion.solver.rxns cimport cRateFunction
-cimport rxndiffusion.solver.cython_sum as cython_sum
+from solver.solver.cyRNG import cyRNG
+from solver.solver.rxns import RateFunction
+from solver.solver.rxns cimport cRateFunction
+cimport solver.solver.cython_sum as cython_sum
 from libc.stdlib cimport rand, RAND_MAX
 from libc.math cimport log, fabs, ceil
 import numpy as np
 cimport numpy as np
 cimport cython
-from rxndiffusion.solver.signals cimport cSquarePulse, cMultiPulse, cSquareWave, cSignal
+from solver.solver.signals cimport cSquarePulse, cMultiPulse, cSquareWave, cSignal
 
 from cpython.array cimport array, clone
 from cpython.array cimport copy as copyarray

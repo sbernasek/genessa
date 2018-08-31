@@ -6,7 +6,7 @@ TO DO:
 """
 
 cimport cython
-cimport rxndiffusion.solver.cython_sum as cython_sum
+cimport solver.solver.cython_sum as cython_sum
 
 from rxns cimport get_binary_repr_size
 from rxns cimport cSpeciesDependent, cInputDependent

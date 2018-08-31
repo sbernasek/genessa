@@ -16,7 +16,7 @@ ext_modules = [
     ]
 
 setup(
-  name='rxndiffusion_tools',
+  name='solver_tools',
   cmdclass={'build_ext': build_ext},
   ext_modules=ext_modules,
   script_args=['build_ext'],
