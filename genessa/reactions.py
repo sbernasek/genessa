@@ -1,5 +1,3 @@
-__author__ = 'Sebi'
-
 import numpy as np
 from scipy.misc import comb
 import functools
@@ -28,21 +26,37 @@ def name_parameter(parameter, default_name='k'):
 
 class Reaction:
 
-    def __init__(self, stoichiometry=None, propensity=None, input_dependence=None, k=1, rxn_type=None, temperature_sensitive=True, atp_sensitive=False, ribosome_sensitive=False, parameters=None):
+    def __init__(self,
+                 stoichiometry=None,
+                 propensity=None,
+                 input_dependence=None,
+                 k=1,
+                 rxn_type=None,
+                 temperature_sensitive=True,
+                 atp_sensitive=False,
+                 ribosome_sensitive=False,
+                 parameters=None):
         """
         Class describes a single kinetic pathway.
 
-        Parameters:
-            stoichiometry (array like or tuple) - list of stoichiometric coefficients for all species. if Tuple,
-                indices of participating species where negative indicates consumption
-            propensity (array like or tuple) - list of reaction orders for all species, if Tuple,
-                indices of species
-            input_dependence (float or np array) - order of rate dependence upon input(s)
+        Args:
+
+            stoichiometry (array like) - stoichiometric coefficients
+
+            propensity (array like) - propensity coefficients
+
+            input_dependence (float or array like) - order of input dependence
+
             k (float) - mass-action reaction rate constant
+
             rxn_type (str) - type of reaction
-            temperature_sensitive (bool) - if True, reaction rate is scalable with temperature
-            atp_sensitive (bool) - if True, reaction rate is scalable with metabolic rate
-            ribosome_sensitive (bool) - if True, reaction rate is scalable with translation capacity
+
+            temperature_sensitive (bool) - if True, rate scales with temp
+
+            atp_sensitive (bool) - if True, rate scales with metabolism
+
+            ribosome_sensitive (bool) - if True, rate scales with ribosomes
+
         """
 
         self.rxn_type = rxn_type
@@ -115,18 +129,24 @@ class Reaction:
         """
         Compute and return current rate of a given pathway.
 
-        Parameters:
+        Args:
+
             states (np array) - current state values
+
             input_state (np array) - current input value(s)
+
             discrete (bool) - if True, use discrete propensity function
+
         Returns:
+
             rate (float) - rate of reaction
+
         """
 
         # get active states and propensities
         _states = states[self.active_species]
 
-        # get reactant activities. if discrete, use combination functions, otherwise use continuous rate law
+        # get reactant activities
         if discrete:
             activities = self._get_activities(_states, self._propensity)
         else:
@@ -198,7 +218,7 @@ class Reaction:
 
 
 class LinearReaction(Reaction):
-    # Simplified version of Reaction class for linear rate laws.
+    """ Simplified version of Reaction class for linear rate laws. """
     def __init__(self, **kwargs):
         Reaction.__init__(self, **kwargs)
         if self._propensity.sum() != 1 or self._input_dependence.sum() != 0:
@@ -212,7 +232,7 @@ class LinearReaction(Reaction):
 
 
 class LinearInput(Reaction):
-    # Simplified version of Reaction class for linear input signal.
+    """ Simplified version of Reaction class for linear input signal. """
     def __init__(self, **kwargs):
         Reaction.__init__(self, **kwargs)
         if self._propensity.sum() != 0 or self._input_dependence.sum() != 1:
@@ -223,7 +243,7 @@ class LinearInput(Reaction):
 
 
 class SecondOrderReaction(Reaction):
-    # Simplified version of Reaction class for second order rate laws.
+    """ Simplified version of Reaction class for second order rate laws. """
 
     # WARNING: does not support multiple input channels (easy fix...)
     def __init__(self, **kwargs):
@@ -252,7 +272,7 @@ class EnzymaticReaction:
         """
         Class describes a single hill-kinetic pathway.
 
-        Parameters:
+        Args:
             stoichiometry (array like) - list of stoichiometric coefficients for all species
             propensity (array like) - weights for activating substrates
             input_dependence (float or array) - order of rate dependence upon input
@@ -763,10 +783,17 @@ class Coupling:
 
 class RegulatoryModule:
 
-    def __init__(self, modifiers=None, nA=0, nD=0, bindsAsComplex=False, k=1, n=1):
+    def __init__(self,
+                 modifiers=None,
+                 nA=0,
+                 nD=0,
+                 bindsAsComplex=False,
+                 k=1,
+                 n=1):
 
         if modifiers is None:
             modifiers = []
+
         self.modifiers = np.array(modifiers, dtype=np.uint32)
         self.nA = nA
         self.nD = nD
@@ -940,11 +967,3 @@ class RateFunction:
         for i, rxn in enumerate(self.reactions):
             rates += rxn_rates[i] * rxn.stoichiometry
         return rates
-
-
-
-
-
-
-
-

@@ -1,5 +1,3 @@
-__author__ = 'Sebi'
-
 time_scaling = 1/60
 
 conditions = {
@@ -17,22 +15,24 @@ mutation_rates = {
     'modify_rate': 0.5  # modifications per edge per generation
 }
 
-# define default rate constants (keys are rxn orders, values are rate constants)
-rate_constants = {
-    0: 1,
-    1: 0.1,
-    2: 0.01
-}
+# define default rate constants (keys are rxn orders)
+rate_constants = {0: 1,
+                  1: 0.1,
+                  2: 0.01}
 
 
 class GeneExpressionParameters:
     """
     Default set of rate parameters for synthesis and degradation of transcripts and proteins.
     """
-    def __init__(self, k_transcription=None, k_translation=None,
-                 k_m=None, hill=None, baseline=None,
-                 gamma_r=None, gamma_p=None
-                 ):
+    def __init__(self,
+                 k_transcription=None,
+                 k_translation=None,
+                 k_m=None,
+                 hill=None,
+                 baseline=None,
+                 gamma_r=None,
+                 gamma_p=None):
 
         # transcription
         self.k_transcription = k_transcription if k_transcription is not None else 1
@@ -60,7 +60,10 @@ class DimerizationParameters:
     """
     Default set of rate parameters for dimer formation and dissociation.
     """
-    def __init__(self, k_association=None, k_dissociation=None, gamma=None):
+    def __init__(self,
+                 k_association=None,
+                 k_dissociation=None,
+                 gamma=None):
 
         # dimer association and dissociation
         self.k_association = k_association if k_association is not None else 1

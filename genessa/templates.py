@@ -1,5 +1,3 @@
-__author__ = 'Sebi'
-
 from .cells import Cell
 from .networks import MutableNetwork
 from .algorithms import MonteCarloSimulation

@@ -1,6 +1,3 @@
-__author__ = 'Sebi'
-
-
 from .reactions import Reaction, EnzymaticReaction, SumReaction, Coupling
 import numpy as np
 import copy as copy
@@ -13,7 +10,7 @@ from matplotlib import gridspec
 
 """
 TO DO:
-    1. add separate input nodes to graph!
+    1. add separate input nodes to graph
     2. add enzymatic reactions to mutation scheme
 
 """
@@ -21,22 +18,32 @@ TO DO:
 
 class Network:
     """
-    Class defines a network of interacting species described by a system of stochastic ODEs.
+    Class defines a network of interacting nodes. Nodes interact via stochastic processes called reactions. Each reaction has a propensity that may depend upon the current state of one or more other nodes.
 
     Attributes:
+
         output_node (int) - index of output
+
         nodes (np array) - vector of node indices
+
         reactions (list) - list of reaction objects
+
         stoichiometry (np array) - N x M matrix of stoichiometric coefficients
+
     """
 
     def __init__(self, nodes=1, inputs=1, reactions=None, output_node=0):
         """
-        Parameters:
+        Args:
+
             nodes (int) - number of nodes
+
             inputs (int) - number of input channels
+
             reactions (list or rxn object) - reaction objects
+
             output_node (int) - index of output
+
         """
 
         # initialize network species
@@ -54,13 +61,6 @@ class Network:
 
         # initialize stoichiometric matrix
         self.stoichiometry = None
-
-        # compile stoichiometric matrix
-        #self.compile_stoichiometry()
-        #self.compile_rate_dependencies()
-
-        # resize input channels
-        #self.resize_inputs()
 
     def sort_rxns(self):
         """
@@ -213,20 +213,29 @@ class MutableNetwork(Network):
     Class inherits a network to which it adds growth and mutation capabilities.
 
     Attributes:
+
         name (str) - name of class type
+
         unique_node_id (int) - counter for unique node numbers
-        node_key (dict) - maps state space dimension (key) to unique node id (value)
+
+        node_key (dict) - maps state space dimension to unique node id
+
     """
 
     def __init__(self, nodes=1, inputs=1, reactions=None, output_node=0):
         """
         Inherits a network and adds mutation capabilities.
 
-        Parameters:
+        Args:
+
             nodes (int) - number of nodes for initialized mutable network
+
             inputs (int) - number of input channels
+
             reactions (list) - reactions for initialized mutable network
+
             output_node (int) - index of output
+
         """
         Network.__init__(self, nodes, inputs, reactions, output_node)
         self.name = 'Cell'
@@ -523,15 +532,25 @@ class Graph:
     Class provides topological view of an individual network.
 
     Attributes:
+
         output_node (int) - index of output node
+
         nodes (np array) - vector of node indices
+
         input_size (int) - number of input channels
+
         reactions (list) - list of reaction objects
+
         stoichiometry (np array) - N x M matrix of stoichiometric coefficients
+
         node_key (dict) - maps state space dimension (key) to unique node id (value)
+
         edge_list (list) - list of edges, each defined as a (from, to, edge_dict) tuple
+
         up_edges (dict) - up-regulating edges in which keys are (from, to) tuples, values are edge weights
+
         down_edges (dict) - down-regulating edges in which keys are (from, to) tuples, values are edge weights
+
         graph (Networkx MultiDiGraph)
 
     """
@@ -540,8 +559,10 @@ class Graph:
         """
         Inherits a mutable network then compiles an edge list and creates a networkx graph object.
 
-        Parameters:
+        Args:
+
             network (network object)
+
         """
 
         # assign poperties

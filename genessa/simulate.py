@@ -1,10 +1,3 @@
-__author__ = 'Sebi'
-
-from .reactions import RateFunction
-from .solver.ssa import Solver as cySolver
-from .timeseries import TimeSeries
-from .parameters import conditions
-from copy import deepcopy
 import numpy as np
 import types
 from array import array
@@ -12,16 +5,25 @@ from array import array
 #import warnings
 #warnings.filterwarnings('error')
 
+from .solver.ssa import SSA
+from .timeseries import TimeSeries
+from .parameters import conditions
+
 
 class Integrator:
     """
-    Class defines determinsitic ODE integration procedure.
+    Class defines a determinsitic ODE integration procedure.
     """
     def __init__(self, network, condition=None):
         """
-        Parameters:
+        Instantiate integrator.
+
+        Args:
+
             network (Network object)
-            condition (str) - environmental conditions affecting rate. either None, 'cold', 'hot', 'diabetic', or 'minute'
+
+            condition (str) - environmental conditions affecting rate, e.g. None, 'cold', 'hot', 'diabetic', or 'minute'
+
         """
         self.network = network
         self.num_reactions = len(network.reactions)
@@ -34,15 +36,17 @@ class Integrator:
             else:
                 self.apply_rate_scaling(condition)
 
-        self.solver = cySolver(self.network)
+        self.solver = SSA(self.network)
 
 
     def apply_rate_scaling(self, condition):
         """
         Applies rate scaling to all condition-sensitive reactions:
 
-        Parameters:
-            condition (str) - environmental conditions affecting rate. either None, 'cold', 'hot', 'diabetic', or 'minute'
+        Args:
+
+            condition (str) - environmental conditions affecting rate. Accepted values are: None, 'cold', 'hot', 'diabetic', or 'minute'
+
         """
 
         # get rate scaling factors
@@ -61,9 +65,19 @@ class Integrator:
             for rxn in self.network.reactions:
                 rxn.rate_constant *= rate_scaling['translation_capacity']**rxn.ribosome_sensitive
 
-    def odeint(self, input_function=None, ic=None, dt=1, duration=100):
+    def odeint(self,
+               input_function=None,
+               ic=None,
+               dt=1,
+               duration=100):
         """
         Simulates dynamic system using Scipy's ode object.
+
+        Args:
+
+
+
+
         """
         from scipy.integrate import odeint
 
@@ -87,7 +101,7 @@ class Integrator:
 
         # define rate function
         def derivative(x, t):
-            dxdt = self.solver.c_solver.get_sp_rates(array('d', x), input_value(t), cumul)
+            dxdt = self.solver.cSSA.get_sp_rates(array('d', x), input_value(t), cumul)
             return dxdt
 
         # run solver and compile timeseries
@@ -96,9 +110,19 @@ class Integrator:
         timeseries = TimeSeries(times, solout.reshape(1, *solout.T.shape))
         return timeseries
 
-    def solve_ivp(self, input_function=None, ic=None, dt=1, duration=100, method='BDF'):
+    def solve_ivp(self,
+                  input_function=None,
+                  ic=None,
+                  dt=1,
+                  duration=100,
+                  method='BDF'):
         """
         Simulates dynamic system using Scipy's ode object.
+
+        Args:
+
+
+
         """
         from scipy.integrate import solve_ivp
         from scipy.interpolate import interp1d
@@ -123,7 +147,7 @@ class Integrator:
 
         # define rate function
         def derivative(t, x):
-            dxdt = self.solver.c_solver.get_sp_rates(array('d', x), input_value(t), cumul)
+            dxdt = self.solver.cSSA.get_sp_rates(array('d', x), input_value(t), cumul)
             return dxdt
 
         # run solver and compile timeseries
@@ -141,38 +165,51 @@ class Simulation(Integrator):
     Class defines a simulation procedure.
     """
 
-    def simulate(self, ic=None, input_function=None, integrator_ic=None, dt=1, duration=100, pure_ssa=True):
+    def simulate(self,
+                 ic=None,
+                 input_function=None,
+                 integrator_ic=None,
+                 dt=1,
+                 duration=100):
         """
         Simulates dynamic system using stochastic solver.
 
-        Parameters:
+        Args:
+
             ic (np array) - initial conditions, defaults to zero
+
             input_function (function) - returns input value(s) for given time
+
             integrator_ic (np array) - initial condition for integrator
+
             dt (float) - time step
+
             duration (float) - simulation end time
-            pure_ssa (bool) - if True, use pure ssa
 
         Returns:
+
             times (np array) - timepoints (1 by t)
+
             states (np array) - state values at each time point (N by t)
+
         """
 
-        # sort reactions
-        #self.network.sort_rxns()
-        #self.network.compile_stoichiometry()
-        #self.network.compile_rate_dependencies()
-
-        # if no initial condition is provided, assume all states are initially zero
+        # if no initial condition provided, assume initial states are all zero
         if ic is None:
             ic = np.zeros(self.network.nodes.size, dtype=np.int64)
+
         elif type(ic) == list or type(ic) == tuple:
             ic = np.array(ic, dtype=np.int64)
-        if len(ic) != self.network.nodes.size:
-            raise RuntimeError('IC dimensions inconsistent with system.')
+
+        # check that initial condition has the correct dimensions
+        assert (len(ic)==self.network.nodes.size), 'Wrong IC dimensions.'
 
         # run solver
-        solout = self.solver.solve(ic=ic, input_function=input_function, integrator_ic=integrator_ic, dt=dt, duration=duration, use_pure_ssa=pure_ssa)
+        solout = self.solver.run(ic=ic,
+                                 input_function=input_function,
+                                 integrator_ic=integrator_ic,
+                                 dt=dt,
+                                 duration=duration)
 
         return solout
 
@@ -182,34 +219,75 @@ class MonteCarloSimulation(Simulation):
     Class defines multiple trials of a simulation procedure.
     """
 
-    def __init__(self, system, ic=None, integrator_ic=None, condition=None):
+    def __init__(self,
+                 system,
+                 ic=None,
+                 integrator_ic=None,
+                 condition=None):
         """
         Each instance has a fixed set of simulation parameters for which samples are generated.
 
-        Parameters:
-            system (network object)
-            ic (np array) - initial conditions, defaults to zero
-            integrator_ic (np array) - integrator initialization
+        Args:
 
-            condition (str) - environmental conditions affecting rates
+            system (network object)
+
+            ic (array like) - initial conditions, defaults to zero
+
+            integrator_ic (array like) - integrator initialization
+
+            condition (str) - environmental condition affecting rates
+
         """
 
+        # instantiate simulation
         Simulation.__init__(self, system, condition)
 
         # set initial condition generating functions
         self.set_initial_conditions(ic, integrator_ic)
 
     def __repr__(self):
+        """ Print list of reactions. """
         self.network.print_reactions()
+        return ''
 
-    def set_initial_conditions(self, ic=None, integrator_ic=None):
+    def set_initial_conditions(self,
+                               ic=None,
+                               integrator_ic=None):
+        """
+        Set initial conditions.
+
+        Args:
+
+            ic (array like or tuple) - initial state
+
+            integrator_ic (array like or tuple) - initial integrator state
+
+        """
+
         N = self.network.nodes.size
-        self.get_ic = self.get_ic_generator(ic, N)
-        self.get_integrator_ic = self.get_ic_generator(integrator_ic, N)
+
+        if ic is None:
+            ic = np.zeros(N)
+
+        self.get_ic = self.build_ic_generator(ic, N)
+        self.get_integrator_ic = self.build_ic_generator(integrator_ic, N)
 
     @staticmethod
-    def get_ic_generator(ic, N):
-        """ Create initial condition generating function. """
+    def build_ic_generator(ic, N):
+        """
+        Build initial condition generating function.
+
+        Args:
+
+            ic (array like or tuple) - initial condition
+
+            N (int) - number of states
+
+        Returns:
+
+            f (func) - returns vector of initial values
+
+        """
         if type(ic) == tuple:
             m, v = ic
             f = lambda n: np.random.normal(m, np.sqrt(v), size=(n, N)).astype(int)
@@ -219,19 +297,28 @@ class MonteCarloSimulation(Simulation):
             f = lambda n: [ic for _ in range(n)]
         return f
 
-    def run(self, input_function=None, num_trials=100, duration=100, dt=1, pure_ssa=True):
+    def run(self,
+            input_function=None,
+            num_trials=100,
+            duration=100,
+            dt=1):
         """
         Runs multiple monte carlo trials and stores results.
 
-        Parameters:
+        Args:
+
             input_function (function) - generates input value(s) for each time
+
             num_trials (int) - number of independent trials
+
             duration (float) - simulation end time
+
             dt (float) - time step
-            pure_ssa (bool) - if True, use pure Gillespie ssa
 
         Returns:
+
             timeseries (TimeSeries) - system state dynamics
+
         """
 
         # get initial conditions
@@ -245,11 +332,16 @@ class MonteCarloSimulation(Simulation):
             # get initial condition and check that it's positive
             ic = ics[trial]
             integrator_ic = integrator_ics[trial]
-            if (ic < 0).sum() != 0:
-                raise ValueError('Failed at trial {:d} with IC {}'.format(trial, ic))
+
+            # check that initial condition is positive
+            assert (ic<0).sum() == 0, 'Failed on Trial {:d}'.format(trial)
 
             # run simulation
-            solout = self.simulate(ic=ic, input_function=input_function, integrator_ic=integrator_ic, dt=dt, duration=duration, pure_ssa=pure_ssa)
+            solout = self.simulate(ic=ic,
+                                   input_function=input_function,
+                                   integrator_ic=integrator_ic,
+                                   dt=dt,
+                                   duration=duration)
             t, s = solout
             samples.append(s)
 

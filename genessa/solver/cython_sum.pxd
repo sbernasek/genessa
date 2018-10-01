@@ -1,4 +1,7 @@
+# cython external imports
 from cpython.array cimport array
+
+# python external imports
 from array import array
 
 cdef inline double sum_double_arr(array arr, int length) nogil:

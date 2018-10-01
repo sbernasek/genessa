@@ -1,5 +1,3 @@
-__author__ = 'Sebi'
-
 import numpy as np
 from scipy.stats import norm
 import matplotlib.pyplot as plt
@@ -12,9 +10,12 @@ class TimeSeries():
 
     def __init__(self, times, states):
         """
-        Parameters:
+        Args:
+
             times (np array) - 1xt vector of timepoints
+
             states (np array) - num_trials x N x t array of state values
+
         """
         self.t = times
         self.states = states
@@ -25,11 +26,14 @@ class TimeSeries():
         """
         Serialize TimeSeries.
 
-        Parameters:
+        Args:
+
             retall (bool) - if True, write states to file
 
         Returns:
+
             js (dict) - json serialization of TimeSeries
+
         """
         js =  {
             't': self.t.tolist(),
@@ -43,7 +47,18 @@ class TimeSeries():
 
     @staticmethod
     def from_json(js):
-        """ Instantiate from serialized TimeSeries. """
+        """
+        Instantiate from serialized TimeSeries.
+
+        Args:
+
+            js (dict) - deserialized json object
+
+        Returns:
+
+            timeseries (TimeSeries)
+
+        """
 
         # unpack serialized values
         t = np.array(js['t'])
@@ -61,12 +76,12 @@ class TimeSeries():
 
     @staticmethod
     def get_mean(states):
-        """ Computes and sets mean trajectory for each state dimension. """
+        """ Returns mean trajectory for each state dimension. """
         return states.mean(axis=0)
 
     @staticmethod
     def get_variance(states):
-        """ Computes and sets trajectory variance for each state dimension. """
+        """ Returns trajectory variance for each state dimension. """
         var = states.var(axis=0)
         var[var == 0] = 1e-30
         return var
@@ -76,14 +91,20 @@ class TimeSeries():
         Returns time (and index in time vector) at which specified percentile of trajectory distribution first reaches
         the specified value.
 
-        Parameters:
+        Args:
+
             dim (int) - dimension of state space
-            percentile (float) - percentile of distribution, specified between 0 and 100
+
+            percentile (float) - percentile of distribution, 0 to 100
+
             value (float) - target value
 
         Returns:
+
             index (int) - index of of timepoint
+
             time (float) - time at which value occurs
+
         """
 
         index = (abs(np.percentile(self.states[:, dim, :], q=percentile, axis=0)-value)).argmin()
@@ -94,28 +115,44 @@ class TimeSeries():
         """
         Returns desired percentile for the specified dimension.
 
-        Parameters:
+        Args:
+
             dim (int) - dimension of state space
-            percentile (float) - percentile of distribution, specified between 0 and 100
+
+            percentile (float) - percentile of distribution, 0 to 100
 
         Returns:
+
             trajectory (np array) - time series for specified percentile
+
         """
         trajectory = np.percentile(self.states[:, dim, :], q=percentile, axis=0)
         return trajectory
 
-    def plot(self, dims=None, samples=True, mean=False, interval=False,
-             colors=None, ax=None):
+    def plot(self,
+             dims=None,
+             samples=True,
+             mean=False,
+             interval=False,
+             colors=None,
+             ax=None):
         """
-        Plot time series from a specified dimension.
+        Plot time series for a specified dimension.
 
-        Parameters:
+        Args:
+
             dims (list) - dimensions of state space to be plotted
+
             samples (bool) - if True, plot individual trajectories
+
             mean (bool) - if True, plot mean trajectory
+
             interval (bool) - if True, plot SEM
+
             colors (list) - colors for each dimension
+
             ax (axes object) - if None, create one
+
         """
 
         # if no dimension specified, select highest
@@ -190,7 +227,9 @@ class GaussianModel(TimeSeries):
 
     @staticmethod
     def from_json(js):
-        """ Instantiate from serialized TimeSeries. """
+        """
+        Instantiate from serialized TimeSeries.
+        """
 
         # unpack serialized values
         t = np.array(js['t'])
@@ -217,15 +256,22 @@ class GaussianModel(TimeSeries):
         Returns time (and index in time vector) at which specified percentile of trajectory distribution first reaches
         the specified value.
 
-        Parameters:
+        Args:
+
             dim (int) - dimension of state space
-            percentile (float) - percentile of distribution, specified between 0 and 100
+
+            percentile (float) - percentile of distribution, 0 to 100
+
             value (float) - target value
+
             after_peak (bool) - if True, begin counting from peak mean value
 
         Returns:
+
             index (np array of int) - index of of timepoint
+
             time (float) - time at which value occurs
+
         """
 
         # get trajectory of specified percentile
@@ -247,11 +293,14 @@ class GaussianModel(TimeSeries):
         """
         Returns desired percentile for the specified dimension using gaussian model.
 
-        Parameters:
-            percentile (float) - percentile of distribution, specified between 0 and 100
+        Args:
+
+            percentile (float) - percentile of distribution, 0 to 100
 
         Returns:
+
             trajectory (np array) - time series for specified percentile
+
         """
         trajectory = self.norm.ppf(percentile/100)
         return trajectory
@@ -260,29 +309,48 @@ class GaussianModel(TimeSeries):
         """
         Evaluates cumulative distribution function at a specified threshold value.
 
-        Parameters:
+        Args:
+
             dim (int) - dimension of interest
-            threshold (np array or float) - threshold(s) at which cdf is evaluated
+
+            threshold (np.ndarray or float) - threshold(s) at which cdf is evaluated
 
         Returns:
-            cdf_vector (np array) - time series for cdf
+
+            cdf_vector (np.ndarray) - time series for cdf
+
         """
 
         cdf_vector = self.norm.cdf(threshold)[dim]
         return cdf_vector
 
-    def plot_confidence_interval(self, ax=None, confidence=0.98, dims=None, time_scaling=1, colors=None, mean=False, alpha=0.5):
+    def plot_confidence_interval(self,
+                                 ax=None,
+                                 confidence=0.98,
+                                 dims=None,
+                                 time_scaling=1,
+                                 colors=None,
+                                 mean=False,
+                                 alpha=0.5):
         """
         Plot confidence interval.
 
-        Parameters:
+        Args:
+
             ax (axes object) - if None, create one
+
             confidence (float) - confidence interval
+
             dims (iterable) - dimensions of state space to be plotted
+
             time_scaling (float) - hours per unit time
+
             colors (iterable) - colors for confidence interval shading
+
             mean (bool) - if True, plot mean
+
             alpha (float) - transparency of fill
+
         """
 
         # define color cycle
@@ -323,11 +391,14 @@ class GaussianModel(TimeSeries):
         """
         Returns GaussianModel of deviations from specified steady state.
 
-        Parameters:
-            steady_state (np array) - steady state for each dimension about which deviations are computed.
+        Args:
+
+            steady_state (np.ndarray) - steady state for each dimension
 
         Returns:
+
             model (GaussianModel object)
+
         """
 
         # if no steady state provided, use final mean value
@@ -349,11 +420,14 @@ class GaussianModel(TimeSeries):
         """
         Returns GaussianModel model normalized by steady state.
 
-        Parameters:
-            steady_state (np array) - normalization basis
+        Args:
+
+            steady_state (np.ndarray) - normalization basis
 
         Returns:
+
             model (GaussianModel object)
+
         """
 
         # if no steady state provided, use final mean value

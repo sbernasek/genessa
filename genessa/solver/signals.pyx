@@ -1,12 +1,12 @@
-# cython: boundscheck=False
-# cython: wraparound=False
 # cython: profile=False
 
-import numpy as np
+# cython external imports
 cimport numpy as np
-
 from cpython.array cimport array
-#from array import array
+
+# python external imports
+import numpy as np
+
 
 cdef class cSignal:
     """ Class defines a single channel square pulse signal. """
