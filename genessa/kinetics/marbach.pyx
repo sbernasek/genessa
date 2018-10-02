@@ -432,3 +432,185 @@ cdef class cRxnMap:
                 mod = self.values.data.as_uints[index]
                 f(mod_obj, mod, states)
                 index += 1
+
+
+#=============================== PYTHON CODE ==================================
+
+
+class RegulatoryModule:
+
+    def __init__(self,
+                 modifiers=None,
+                 nA=0,
+                 nD=0,
+                 bindsAsComplex=False,
+                 k=1,
+                 n=1):
+
+        if modifiers is None:
+            modifiers = []
+
+        self.modifiers = np.array(modifiers, dtype=np.uint32)
+        self.nA = nA
+        self.nD = nD
+        self.nI = nA + nD
+        self.bindsAsComplex = bindsAsComplex
+        self.k = k
+        self.n = n
+
+        # predefine active species mask
+        self.num_modifiers = self.modifiers.size
+
+    def get_activation(self, x):
+        """ x are the levels of active species """
+
+        # fractional activations
+        v = (x[self.modifiers]/self.k)**self.n
+
+        # get numerator
+        multiplyActivators = 1
+        if self.nA > 0:
+            multiplyActivators *= np.product(v[:self.nA])
+        numerator = multiplyActivators
+
+        # get denominator
+        denominator = 1
+        if self.bindsAsComplex:
+            denominator += multiplyActivators
+            if self.nD > 0:
+                multiplyAllInputs = multiplyActivators * np.product(v[self.nA: self.nI])
+                denominator += multiplyAllInputs
+        else:
+            denominator *= np.product(1+v)
+
+        return numerator/denominator
+
+    def shift(self, shift):
+        """
+
+        Expand list of modifiers.
+
+        Args:
+
+            shift (int) - number of positions appended to beginning
+
+        Returns:
+
+            rxn (RegulatoryModule) - updated reaction
+
+        """
+
+        modifiers = np.hstack((np.zeros(shift, dtype=np.int64), self.modifiers))
+        nA = self.nA,
+        nD = self.nD,
+        bindsAsComplex = self.bindsAsComplex,
+        k = self.k,
+        n = self.n
+        return RegulatoryModule(modifiers, nA, nD, bindsAsComplex, k, n)
+
+
+class Transcription:
+
+    def __init__(self,
+                 stoichiometry=None,
+                 modules=None,
+                 k=1,
+                 alpha=None,
+                 perturbed=False,
+                 input_dependence=None,
+                 rxn_type=None,
+                 parameters=None):
+
+        self.rxn_type = rxn_type
+
+        # compile stoichiometry as a vector of coefficients
+        if stoichiometry is None:
+            stoichiometry = [0]
+        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
+
+        # set reaction parameters
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+
+        # add k and alpha
+        self.k = np.array([k], dtype=np.float64)
+        self.alpha = np.array(alpha, dtype=np.float64)
+
+        # set perturbation sensitivity flag
+        self.perturbed = perturbed
+
+        # add modules
+        if modules is None:
+            self.modules = []
+        else:
+            self.modules = modules
+        self.num_modules = len(self.modules)
+
+        # compile propensity as a boolean array
+        self.propensity = np.zeros(len(stoichiometry), dtype=np.int64)
+        for mod in self.modules:
+            self.propensity[mod.modifiers] = 1
+
+        # if kinetics are zeroth order, raise flag to skip rate computation
+        self.zero_order = False
+        if self.num_modules == 0:
+            self.zero_order = True
+
+        # set input dependence (currently have no influence)
+        if input_dependence is None:
+            input_dependence = np.zeros(1, dtype=np.uint32)
+        self.input_dependence = input_dependence
+        self.active_inputs = np.where(self.input_dependence != 0)[0]
+        self.num_active_inputs = self.active_inputs.size
+        self._input_dependence = self.input_dependence[self.active_inputs]
+
+        # assign reaction rate sensitivities
+        self.temperature_sensitive = True
+        self.atp_sensitive = True
+        self.ribosome_sensitive = False
+
+    def shift(self, shift):
+        """
+
+        Expand stoichiometry vector.
+
+        Args:
+
+            shift (int) - number of positions appended to beginning
+
+        Returns:
+
+            rxn (Transcription) - updated reaction
+
+        """
+
+        s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
+        modules = [mod.shift(shift) for mod in self.modules]
+
+        kw = dict(k=self.k[0],
+                  alpha=self.alpha,
+                  perturbed=self.perturbed,
+                  input_dependence=self.input_dependence,
+                  rxn_type=self.rxn_type,
+                  parameters=self.parameters)
+
+        return Transcription(s, modules, **kw)
+
+    def evaluate_rate(self, x, inputs):
+
+        m = np.array([mod.get_activation(x) for mod in self.modules], dtype=np.float64)
+
+        rate = 0
+        for i, alpha in enumerate(self.alpha):
+            s = np.binary_repr(i)
+            p = 1
+            for j in range(self.num_modules):
+                if len(s)-j-1 >= 0 and s[len(s)-j-1] == '1':
+                    p *= m[j]
+                else:
+                    p *= (1-m[j])
+            rate += (alpha * p)
+
+        #rate *= (self.k + (self._input_dependence*inputs).sum())
+        return rate

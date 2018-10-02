@@ -1,11 +1,10 @@
 # cython: profile=False
 
 # cython intra-package imports
-from .signals cimport cSquarePulse, cMultiPulse, cSquareWave, cSignal
-from .networks cimport cNetwork, cStoichiometry
+from ..signals.signals cimport cSquarePulse, cMultiPulse, cSquareWave, cSignal
+from ..systems.networks cimport cNetwork, cStoichiometry
 
 # python intra-package imports
-from .rxns import RateFunction
 
 # cython external imports
 from libc.stdlib cimport rand, RAND_MAX
@@ -17,7 +16,6 @@ cimport cython
 # python external imports
 import numpy as np
 from array import array
-from copy import deepcopy
 
 
 cdef double get_timestep(double total_rate,
@@ -98,6 +96,22 @@ cdef class cSSA:
 
         # initialize array for regular states
         self.rstates = array('I', np.zeros(network.N, dtype=np.uint32))
+
+    @staticmethod
+    def from_network(network):
+        """
+        Instantiate from python network.
+
+        Args:
+
+            network (Network)
+
+        Returns:
+
+            c_ssa (cSSA)
+
+        """
+        return cSSA(cNetwork.from_network(network))
 
     cpdef array get_sp_rates(self,
                              array states,
@@ -312,83 +326,3 @@ cdef class cSSA:
         cdef unsigned int i
         for i in xrange(self.network.N):
             cumulative.data.as_doubles[i] += (tau * states.data.as_uints[i])
-
-
-class SSA:
-    """
-    Python rapper for SSA solver.
-    """
-
-    def __init__(self, network):
-
-        # sort rxns and compile stoichiometry
-        network.sort_rxns()
-        network.resize_inputs()
-        network.compile_stoichiometry()
-
-        # typecast network features
-        N = network.nodes.size
-        M = len(network.reactions)
-        I = network.input_size
-        self.N = N
-        self.M = M
-        self.I = I
-
-        # get cythonized rate function and network
-        S = cStoichiometry.from_array(network.stoichiometry)
-        R = RateFunction(network).cRateFunction
-        c_network = cNetwork(N, M, I, S, R)
-        self.cSSA = cSSA(c_network)
-
-    def run(self,
-            ic,
-            input_function=None,
-            integrator_ic=None,
-            dt=1.,
-            duration=100.):
-        """
-
-        Run stoachastic simulation.
-
-        Args:
-
-            ic (np.ndarray[np.uint32]) - initial condition
-
-            input_function (func) - returns input value(s)
-
-            dt (float) - timestep used for interpolation onto regular grid
-
-            duration (float) - simulation end time
-
-        Returns:
-
-            times_regular (np.ndarray[float]) - interpolated time vector
-
-            states_regular (np.ndarray[float]) - interpolated state vector
-
-        """
-
-        # set input function
-        if input_function is None:
-            input_function = cSignal([0 for _ in range(self.I)])
-        else:
-            input_function = deepcopy(input_function)
-
-        # check initial condition type
-        ic = ic.astype(np.uint32)
-
-        # set initial condition for integrator
-        if integrator_ic is None:
-            integrator_ic = np.zeros(self.N, dtype=np.float64)
-        else:
-            integrator_ic = integrator_ic.astype(np.float64)
-
-        # run solver
-        solout = self.cSSA.run(ic,
-                               input_function,
-                               integrator_ic,
-                               dt=dt,
-                               duration=duration)
-
-        return solout
-

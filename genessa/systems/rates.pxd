@@ -1,14 +1,14 @@
 from cpython.array cimport array
 
 # cython intra-package imports
-from .kinetics.massaction cimport cMassAction
-from .kinetics.control cimport cPController, cIController
-from .kinetics.hill cimport cHill
-from .kinetics.marbach cimport cTranscription
-from .kinetics.coupling cimport cCoupling
+from ..kinetics.massaction cimport cMassAction
+from ..kinetics.control cimport cPController, cIController
+from ..kinetics.hill cimport cHill
+from ..kinetics.marbach cimport cTranscription
+from ..kinetics.coupling cimport cCoupling
 
 
-cdef class cRateFunction:
+cdef class cRates:
 
     # attributes
     cdef cCoupling coupling
@@ -30,12 +30,12 @@ cdef class cRateFunction:
     cdef void update(self, array states, array inputs, array cumul, unsigned int fired) nogil
     cdef void update_all(self, array states, array inputs, array cumul) nogil
     cpdef void cupdate(self, array states, array inputs, array cumul) with gil
-    cpdef array cget_rxn_rates(self, array states, array inputs, array cumul)
+    cpdef array evaluate_rxn_rates(self, array states, array inputs, array cumul)
 
 
 # define mappable function names
-ctypedef void (*cSetRate)(cRateFunction, unsigned int, array, array, array) nogil
-ctypedef void (*cPerturb)(cRateFunction, unsigned int, double) nogil
+ctypedef void (*cSetRate)(cRates, unsigned int, array, array, array) nogil
+ctypedef void (*cPerturb)(cRates, unsigned int, double) nogil
 
 
 cdef class cRxnMap:
@@ -44,5 +44,5 @@ cdef class cRxnMap:
     cdef array ind, lengths, values
 
     # methods
-    cdef void app(self, cRateFunction rf, unsigned int key, cSetRate f, array states, array inputs, array cumul) nogil
-    cdef void app_ptb(self, cRateFunction rf, unsigned int key, cPerturb f, double ptb) nogil
+    cdef void app(self, cRates rf, unsigned int key, cSetRate f, array states, array inputs, array cumul) nogil
+    cdef void app_ptb(self, cRates rf, unsigned int key, cPerturb f, double ptb) nogil

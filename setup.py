@@ -235,31 +235,31 @@ except FileNotFoundError:
 ext_modules =[
 
     # base kinetics
-    declare_extension("genessa.solver.kinetics.base", ext_type, dirs),
+    declare_extension("genessa.kinetics.base", ext_type, dirs),
 
     # mass action kinetics
-    declare_extension("genessa.solver.kinetics.massaction", ext_type, dirs),
+    declare_extension("genessa.kinetics.massaction", ext_type, dirs),
 
     # hill kinetics
-    declare_extension("genessa.solver.kinetics.hill", ext_type, dirs),
+    declare_extension("genessa.kinetics.hill", ext_type, dirs),
 
     # controller kinetics
-    declare_extension("genessa.solver.kinetics.control", ext_type, dirs),
+    declare_extension("genessa.kinetics.control", ext_type, dirs),
 
     # coupling kinetics
-    declare_extension("genessa.solver.kinetics.coupling", ext_type, dirs),
+    declare_extension("genessa.kinetics.coupling", ext_type, dirs),
 
     # marbach kinetics
-    declare_extension("genessa.solver.kinetics.marbach", ext_type, dirs),
-
-    # rate function
-    declare_extension("genessa.solver.rxns", ext_type, dirs),
+    declare_extension("genessa.kinetics.marbach", ext_type, dirs),
 
     # signals
-    declare_extension("genessa.solver.signals", ext_type, dirs),
+    declare_extension("genessa.signals.signals", ext_type, dirs),
+
+    # rate functions
+    declare_extension("genessa.systems.rates", ext_type, dirs),
 
     # networks
-    declare_extension("genessa.solver.networks", ext_type, dirs),
+    declare_extension("genessa.systems.networks", ext_type, dirs),
 
     # ssa
     declare_extension("genessa.solver.ssa", ext_type, dirs)

@@ -7,6 +7,9 @@ from cpython.array cimport array
 # python external imports
 import numpy as np
 
+# cython intra-package imports
+from .signals cimport cSignal, cSquarePulse, cMultiPulse, cSquareWave
+
 
 cdef class cSignal:
     """ Class defines a single channel square pulse signal. """

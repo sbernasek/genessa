@@ -2,7 +2,7 @@
 from cpython.array cimport array
 
 # import intra-package cython dependencies
-from .rxns cimport cRateFunction
+from .rates cimport cRates
 
 
 cdef class cStoichiometry:
@@ -17,7 +17,7 @@ cdef class cNetwork:
 
     cdef unsigned int N, M, I
     cdef cStoichiometry S
-    cdef cRateFunction R
+    cdef cRates R
 
     cdef array get_rxn_rates(self)
 

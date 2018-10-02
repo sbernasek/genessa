@@ -17,19 +17,18 @@ from functools import reduce
 from operator import add
 
 # cython intra-package imports
+from ..kinetics.massaction cimport cMassAction
+from ..kinetics.control cimport cPController, cIController
+from ..kinetics.hill cimport cHill
+from ..kinetics.marbach cimport cTranscription
+from ..kinetics.coupling cimport cCoupling
+from .rates cimport cRates, cRxnMap
 from .cython_sum cimport sum_double_arr
-from .kinetics.massaction cimport cMassAction
-from .kinetics.control cimport cPController, cIController
-from .kinetics.hill cimport cHill
-from .kinetics.marbach cimport cTranscription
-from .kinetics.coupling cimport cCoupling
-from .rxns cimport cRateFunction, cRxnMap
+
+# ============================= CYTHON CODE ===================================
 
 
-# ==============================START CYTHON================================= #
-
-
-cdef class cRateFunction:
+cdef class cRates:
 
     def __init__(self,
                  cCoupling coupling,
@@ -203,11 +202,26 @@ cdef class cRateFunction:
 
             self.rates.data.as_doubles[rxn] = rate
 
-    cpdef array cget_rxn_rates(self,
-                               array states,
-                               array inputs,
-                               array cumul):
-        """ Update continuous rates and return current rate vector. """
+    cpdef array evaluate_rxn_rates(self,
+                                   array states,
+                                   array inputs,
+                                   array cumul):
+        """
+        Update rates and return current rate vector.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            input_value (array[double]) - input values
+
+            cumul (array[double]) - integrator values
+
+        Returns:
+
+            rates (array[double]) - reaction rates
+
+        """
         self.cupdate(states, inputs, cumul)
         return self.rates
 
@@ -228,7 +242,7 @@ cdef class cRxnMap:
         return indices, lengths, values
 
     cdef void app(self,
-                  cRateFunction rf,
+                  cRates rf,
                   unsigned int key,
                   cSetRate f,
                   array states,
@@ -244,7 +258,7 @@ cdef class cRxnMap:
             index += 1
 
     cdef void app_ptb(self,
-                      cRateFunction rf,
+                      cRates rf,
                       unsigned int key,
                       cPerturb f,
                       double ptb) nogil:
@@ -257,22 +271,155 @@ cdef class cRxnMap:
             f(rf, rxn, ptb)
             index += 1
 
+#============================== PYTHON CODE ===================================
 
-# ==============================END CYTHON=================================== #
 
 
-class RateFunction:
+class Rates:
     """
-    Python wrapper for c-based reaction rate computation.
+    Rate function.
+
+    Attributes:
+
+        N (int) - network dimensionality
+
+        M (int) - number of reactions
+
+        reactions (list) - list of python-based reaction objects
+
+        cRates (cRates) - cython rate function
 
     """
 
-    def __init__(self, cell):
+    def __init__(self, network):
         """
 
         Args:
 
-            rxns (list of reaction instances)
+            network (Network)
+
+        """
+        self.N = network.nodes.size
+        self.M = len(network.reactions)
+        self.reactions = network.reactions
+
+        # compile cRates
+        self.cRates = self.compile_c_rate_function(network)
+
+
+    def __call__(self, states, input_value, cumul):
+        """
+        Evaluate reaction rates.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            input_value (array[double]) - input values
+
+            cumul (array[double]) - integrator values
+
+        Returns:
+
+            rxn_rates (array[double]) - reaction rates
+
+        """
+        return self.c_evaluate_rxn_rates(states, input_value, cumul)
+
+    def c_evaluate_rxn_rates(self, states, input_state, cumul):
+        """
+        Evaluate reaction rates using cRates object.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            input_value (array[double]) - input values
+
+            cumul (array[double]) - integrator values
+
+        Returns:
+
+            rxn_rates (array[double]) - reaction rates
+
+        """
+        return self.cRates.evaluate_rxn_rates(states, input_state, cumul)
+
+    def c_evaluate_species_rates(self, states, input_state, cumul):
+        """
+        Evaluate species rates using cRates object.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            input_value (array[double]) - input values
+
+            cumul (array[double]) - integrator values
+
+        Returns:
+
+            species_rates (array[double]) - species rates
+
+        """
+        rates = np.zeros(self.N, dtype=np.float64)
+        rxn_rates = self.cRates.evaluate_rxn_rates(states, input_state, cumul)
+        for i, rxn in enumerate(self.reactions):
+            rates += rxn_rates[i] * rxn.stoichiometry
+        return rates
+
+    def py_evaluate_rxn_rates(self, states, input_state):
+        """
+        Evaluate reaction rates using python rate functions.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            input_value (array[double]) - input values
+
+        Returns:
+
+            rxn_rates (array[double]) - reaction rates
+
+        """
+        rates = np.zeros(self.M, dtype=np.float64)
+        for i, rxn in enumerate(self.reactions):
+            rates[i] = rxn.evaluate_rate(states, input_state)
+        return rates
+
+    def py_evaluate_species_rates(self, states, input_state):
+        """
+        Evaluate species rates using python rate functions.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            input_value (array[double]) - input values
+
+        Returns:
+
+            species_rates (array[double]) - species rates
+
+        """
+        rates = np.zeros(self.N, dtype=np.float64)
+        for rxn in self.reactions:
+            rates += rxn.evaluate_rate(states, input_state) * rxn.stoichiometry
+        return rates
+
+    @classmethod
+    def compile_c_rate_function(cls, network):
+        """
+        Compile cRates instance for given network.
+
+        Args:
+
+            network (Network)
+
+        Returns:
+
+            cRates (cRates)
 
         """
 
@@ -285,7 +432,7 @@ class RateFunction:
 
         rxn_types = []
 
-        for rxn in cell.reactions:
+        for rxn in network.reactions:
 
             if rxn.__class__.__name__ == 'Coupling':
                 rxn_types.append(0)
@@ -299,7 +446,7 @@ class RateFunction:
                 rxn_types.append(2)
                 transcription.append(rxn)
 
-            elif rxn.__class__.__name__ == 'EnzymaticReaction':
+            elif rxn.__class__.__name__ == 'Hill':
                 rxn_types.append(3)
                 hill.append(rxn)
 
@@ -315,13 +462,13 @@ class RateFunction:
                 raise ValueError('{} reaction type not recognized.'.format(rxn.__class__.__name__))
 
         # get edge map
-        edge_map = self.get_rxn_map(cell, maptype='edges')
+        edge_map = cls.get_rxn_map(network, maptype='edges')
 
         # get repressor map
-        repressor_map = self.get_rxn_map(cell, maptype='repressors')
+        repressor_map = cls.get_rxn_map(network, maptype='repressors')
 
         # get modules map
-        modules_map = self.get_rxn_map(cell, maptype='modules')
+        modules_map = cls.get_rxn_map(network, maptype='modules')
 
         # get rate objects
         coupling = cCoupling.from_list(coupling, edge_map, repressor_map)
@@ -332,31 +479,26 @@ class RateFunction:
         pcontrol = cPController.from_list(pcontrol)
 
         # get reaction map
-        rxn_map = self.get_rxn_map(cell, maptype='propensity')
-        input_map = self.get_input_map(cell)
-        perturbation_map = self.get_perturbation_map(cell)
+        rxn_map = cls.get_rxn_map(network, maptype='propensity')
+        input_map = cls.get_input_map(network)
+        perturbation_map = cls.get_perturbation_map(network)
 
         # set reaction lists
         rxn_types = np.array(rxn_types, dtype=np.uint32)
-        rxn_keys = self.get_rxn_keys(rxn_types)
+        rxn_keys = cls.get_rxn_keys(rxn_types)
 
         # instantiate cReactions object
-        self.cRateFunction = cRateFunction(coupling, massaction, transcription, hill, icontrol, pcontrol, rxn_types, rxn_keys, rxn_map, input_map, perturbation_map)
-
-    def __call__(self, states, input_value, cumul):
-        """
-        Get rate vector from cRateFunction.get_rxn_rate
-
-        Args:
-
-            states (array[unsigned int]) - state values
-
-            input_value (array[double]) - input values
-
-            cumul (array[double]) - integrator values
-
-        """
-        return self.cRateFunction.cget_rxn_rates(states, input_value, cumul)
+        return cRates(coupling,
+                     massaction,
+                     transcription,
+                     hill,
+                     icontrol,
+                     pcontrol,
+                     rxn_types,
+                     rxn_keys,
+                     rxn_map,
+                     input_map,
+                     perturbation_map)
 
     @staticmethod
     def get_rxn_keys(rxn_types):
@@ -366,13 +508,54 @@ class RateFunction:
             keys[ind] = np.cumsum(ind)[ind]-1
         return keys
 
+    @classmethod
+    def get_rxn_map(cls, network, maptype='propensity'):
+        """
+        Returns dictionary where keys are states and values are lists of  reaction indices whose rates depend upon each state.
+
+        Args:
+
+            network (Network)
+
+            maptype (str) - type of rxn map
+
+
+        Returns:
+
+            adict (dict) - {state: index} pairs
+
+        """
+
+        if maptype == 'propensity':
+            p_dict = cls.get_propensity_dict(network)
+        elif maptype == 'repressors':
+            p_dict = cls.get_repressor_dependence_dict(network)
+        elif maptype == 'edges':
+            p_dict = cls.get_edge_dict(network)
+        elif maptype == 'modules':
+            p_dict = cls.get_module_dependence_dict(network)
+
+        adict = {i: [] for i in range(len(network.reactions))}
+        for (i, rxn) in enumerate(network.reactions):
+            list_of_lists = [p_dict[s] for s in rxn.stoichiometry.nonzero()[0]]
+            if len(list_of_lists) > 0:
+                alist = reduce(add, list_of_lists)
+                adict[i].extend(alist)
+
+        # remove duplicates
+        for (k, v) in adict.items():
+            adict[k] = list(set(v))
+
+        return adict
+
     @staticmethod
     def get_repressor_dependence_dict(network):
         """
         Returns dictionary where keys are states and values are lists of  repressor indices whose occupancies depend upon each state.
         """
         adict = {i: [] for i in range(network.nodes.size)}
-        rxns = [rxn for rxn in network.reactions if rxn.__class__.__name__=='Coupling']
+        get_name = lambda x: x.__class__.__name__
+        rxns = [rxn for rxn in network.reactions if get_name(rxn)=='Coupling']
 
         if len(rxns) > 0:
             # store index of repressor i whose occupancy depends on state s
@@ -429,7 +612,7 @@ class RateFunction:
 
             # store index of reaction i whose repression depends on state s
             rxn_type = rxn.__class__.__name__
-            if rxn_type in ('EnzymaticReaction', 'Coupling'):
+            if rxn_type in ('Hill', 'Coupling'):
                 for repressor in rxn.repressors:
                     for s in repressor.active_substrates:
                         adict[s].append(i)
@@ -442,33 +625,9 @@ class RateFunction:
 
         return adict
 
-    @classmethod
-    def get_rxn_map(cls, network, maptype='propensity'):
-
-        if maptype == 'propensity':
-            p_dict = cls.get_propensity_dict(network)
-        elif maptype == 'repressors':
-            p_dict = cls.get_repressor_dependence_dict(network)
-        elif maptype == 'edges':
-            p_dict = cls.get_edge_dict(network)
-        elif maptype == 'modules':
-            p_dict = cls.get_module_dependence_dict(network)
-
-        adict = {i: [] for i in range(len(network.reactions))}
-        for (i, rxn) in enumerate(network.reactions):
-            list_of_lists = [p_dict[s] for s in rxn.stoichiometry.nonzero()[0]]
-            if len(list_of_lists) > 0:
-                alist = reduce(add, list_of_lists)
-                adict[i].extend(alist)
-
-        # remove duplicates
-        for (k, v) in adict.items():
-            adict[k] = list(set(v))
-
-        return adict
-
     @staticmethod
     def get_input_map(network):
+        """ Map inputs to reactions. """
         adict = {i: [] for i in range(network.input_size)}
         for (j, rxn) in enumerate(network.reactions):
             rxn_type = rxn.__class__.__name__
@@ -492,3 +651,4 @@ class RateFunction:
                 if rxn.perturbed == True:
                     adict[0].append(j)
         return adict
+

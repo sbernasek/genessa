@@ -1,4 +1,3 @@
-from .reactions import Reaction, EnzymaticReaction, SumReaction, Coupling
 import numpy as np
 import copy as copy
 from tabulate import tabulate
@@ -7,6 +6,13 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import matplotlib.patches as mpatches
 from matplotlib import gridspec
+
+# intra-package python imports
+from ..kinetics.hill import Hill, Repressor
+from ..kinetics.massaction import MassAction
+from ..kinetics.coupling import Coupling
+from ..kinetics.control import SumReaction
+
 
 """
 TO DO:
@@ -107,7 +113,7 @@ class Network:
                 rxn.input_dependence = np.zeros(self.input_size)
 
             # resize repressors
-            if type(rxn) in (EnzymaticReaction, Coupling):
+            if type(rxn) in (Hill, Coupling):
                 for repressor in rxn.repressors:
                     if repressor.input_dependence is None:
                         repressor.input_dependence = np.zeros(self.input_size)
@@ -250,38 +256,6 @@ class MutableNetwork(Network):
         graph.show_reactions()
         graph.visualize_graph()
         return str(type(self))
-
-    @staticmethod
-    def from_json(js):
-
-        # create instance
-        network = MutableNetwork()
-
-        # get each attribute from json dictionary
-        network.output_node = js['output_node']
-        network.nodes = np.array(js['nodes'])
-        network.unique_node_id = js['unique_node_id']
-        network.stoichiometry = np.array(js['stoichiometry'])
-        network.node_key = {int(key): int(val) for key, val in js['node_key'].items()}
-
-        # get attributes containing nested classes
-        network.reactions = [Reaction.from_json(rxn) if rxn_type=='mass_action' else EnzymaticReaction.from_json(rxn)
-                             for rxn, rxn_type in zip(js['reactions'], js['rxn_types'])]
-
-        return network
-
-    def to_json(self):
-        return {
-            # return each attribute
-            'output_node': int(self.output_node),
-            'nodes': self.nodes.tolist(),
-            'unique_node_id': int(self.unique_node_id),
-            'stoichiometry': self.stoichiometry.tolist(),
-            'node_key': self.node_key,
-
-            # return attributes containing nested classes
-            'reactions': [rxn.to_json() for rxn in self.reactions],
-            'rxn_types': ['mass_action' if isinstance(rxn, Reaction) else 'enzymatic' for rxn in self.reactions]}
 
     def divide(self):
         """
@@ -437,7 +411,10 @@ class MutableNetwork(Network):
                     stoichiometry[product] = 1
 
         # add new reaction to network
-        rxn = Reaction(stoichiometry, propensity=propensity[self.input_size:], input_dependence=propensity[0:self.input_size], k=rate_constants[rxn_order])
+        rxn = MassAction(stoichiometry,
+                         propensity=propensity[self.input_size:],
+                         input_dependence=propensity[0:self.input_size],
+                         k=rate_constants[rxn_order])
         self.reactions.append(rxn)
 
     def remove_edges(self, removals=1):
@@ -465,16 +442,21 @@ class MutableNetwork(Network):
             if np.sum(abs(rxn.stoichiometry[removed_dimensions])+abs(rxn.propensity[removed_dimensions])) != 0:
                 self.reactions.remove(rxn)
 
-    def update_reaction_dimensions(self, added_node_ids=None, removed_node_ids=None):
+    def update_reaction_dimensions(self,
+                                   added_node_ids=None,
+                                   removed_node_ids=None):
         """
         Updates dimensions of stoichiometry and propensity vectors for each reaction.
 
-        Parameters:
+        Args:
+
             added_node_ids (np array) - unique indices of nodes to be added
+
             removed_node_ids (np array) - unique indices of nodes to be removed
+
         """
 
-        # add new nodes to stoichiometry and propensity vectors for each reaction
+        # add new nodes to stoichiometry and propensity vectors
         if added_node_ids is not None:
             insertion_points = np.searchsorted(self.nodes, added_node_ids)
             for rxn in self.reactions:
@@ -482,7 +464,7 @@ class MutableNetwork(Network):
                 rxn.propensity = np.insert(rxn.propensity, insertion_points, np.zeros(insertion_points.size))
                 rxn.active_species = np.where(rxn.propensity != 0)[0]
 
-        # remove expired nodes from stoichiometry and propensity vectors for each reaction
+        # remove expired nodes from stoichiometry and propensity vectors
         if removed_node_ids is not None:
             removed_dimensions = np.array([dim for dim, node_id in self.node_key.items() if node_id in removed_node_ids])
             for rxn in self.reactions:
@@ -494,8 +476,10 @@ class MutableNetwork(Network):
         """
         Merges current network instance with another network instance.
 
-        Parameters:
+        Args:
+
             other_network (MutableNetwork object) - network to be merged
+
         """
 
         # copy other network
@@ -543,9 +527,9 @@ class Graph:
 
         stoichiometry (np array) - N x M matrix of stoichiometric coefficients
 
-        node_key (dict) - maps state space dimension (key) to unique node id (value)
+        node_key (dict) - maps state dimension (key) to unique node id (value)
 
-        edge_list (list) - list of edges, each defined as a (from, to, edge_dict) tuple
+        edge_list (list) - edges defined as a (from, to, edge_dict) tuple
 
         up_edges (dict) - up-regulating edges in which keys are (from, to) tuples, values are edge weights
 
@@ -604,7 +588,7 @@ class Graph:
             products = ", ".join(str(product) for product in products)
 
             # for enzymatic reactions, use hill rate law
-            if type(rxn) == EnzymaticReaction:
+            if type(rxn) == Hill:
                 rate_law = self.get_enzymatic_rate_law(rxn)
 
             elif type(rxn) == SumReaction:
@@ -643,7 +627,7 @@ class Graph:
             rxn_table.append([name, reactants, products, rate_law, rate_constant])
 
             # for enzymatic reactions, add any repressors
-            if type(rxn) in (EnzymaticReaction, Coupling):
+            if type(rxn) in (Hill, Coupling):
                 for repressor in rxn.repressors:
                     repressor_name = 'Repression of ' + rxn.rxn_type
                     repressor_rate_law = '1 - ' + self.get_enzymatic_rate_law(repressor)
@@ -680,7 +664,7 @@ class Graph:
         Compiles rate law in string form for a given reaction with mass-action kinetics
 
         Parameters:
-            rxn (Reaction)
+            rxn (MassAction)
 
         Returns:
             rate_law (str)
@@ -700,7 +684,7 @@ class Graph:
 
     def format_rate_constant(self, rxn):
         rate_constant = '{:2.5f}'.format(rxn.k[0])
-        if type(rxn) == EnzymaticReaction:
+        if type(rxn) == Hill:
             for i, coeff in enumerate(rxn.rate_modifier):
                 if coeff != 0:
                     rate_constant += ' + {:0.1f}[IN_{:d}]'.format(coeff, i)
@@ -711,7 +695,7 @@ class Graph:
         Compiles rate law in string form for a given enzymatic reaction or repressor.
 
         Parameters:
-            rxn (EnzymaticReaction or EnzymaticRepressor)
+            rxn (Hill or Repressor)
 
         Returns:
             rate_law (str) - in Hill form
@@ -791,7 +775,7 @@ class Graph:
                 downregulated = downregulated.union(set([self.node_key[dependent] for dependent, coeff in enumerate(rxn.stoichiometry) if coeff < 0]))
 
             # for enzymatic reactions, check all repressors
-            if type(rxn) is EnzymaticReaction:
+            if type(rxn) == Hill:
                 for repressor in rxn.repressors:
 
                     # check if repressor is input dependent

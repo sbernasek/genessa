@@ -1,51 +1,60 @@
 import numpy as np
 import types
 from array import array
+from copy import deepcopy
 
 #import warnings
 #warnings.filterwarnings('error')
 
-from .solver.ssa import SSA
+from .ssa import cSSA
 from .timeseries import TimeSeries
-from .parameters import conditions
+from ..parameters import conditions
 
 
-class Integrator:
+class Simulation:
     """
-    Class defines a determinsitic ODE integration procedure.
+    Python wrapper for SSA solver.
     """
-    def __init__(self, network, condition=None):
+
+    def __init__(self, network, condition):
         """
-        Instantiate integrator.
+        Instantiate SSA solver.
 
         Args:
 
-            network (Network object)
+            network (Network)
 
-            condition (str) - environmental conditions affecting rate, e.g. None, 'cold', 'hot', 'diabetic', or 'minute'
+            condition (str) - environmental conditions affecting rates
 
         """
-        self.network = network
-        self.num_reactions = len(network.reactions)
-        self.network.sort_rxns()
+
+        network.sort_rxns()
 
         # apply any rate scaling conditions
         if condition is not None:
             if condition not in conditions.keys():
                 raise ValueError('Condition not recognized.')
             else:
-                self.apply_rate_scaling(condition)
+                self.apply_rate_scaling(network, condition)
 
-        self.solver = SSA(self.network)
+        # store system dimensions
+        self.N = network.nodes.size
+        self.M = len(network.reactions)
+        self.I = network.input_size
 
+        # instantiate cython solver
+        self.cSSA = cSSA.from_network(network)
 
-    def apply_rate_scaling(self, condition):
+    @staticmethod
+    def apply_rate_scaling(network, condition):
         """
-        Applies rate scaling to all condition-sensitive reactions:
+        Applies rate scaling to all condition-sensitive reactions in a network.
 
         Args:
 
-            condition (str) - environmental conditions affecting rate. Accepted values are: None, 'cold', 'hot', 'diabetic', or 'minute'
+            network (Network)
+
+            condition (str) - environmental conditions affecting rates
 
         """
 
@@ -54,15 +63,15 @@ class Integrator:
 
         # apply scaling factors
         if 'temperature' in rate_scaling.keys():
-            for rxn in self.network.reactions:
+            for rxn in network.reactions:
                 rxn.rate_constant *= rate_scaling['temperature']**rxn.temperature_sensitive
 
         if 'metabolic_rate' in rate_scaling.keys():
-            for rxn in self.network.reactions:
+            for rxn in network.reactions:
                 rxn.rate_constant *= rate_scaling['metabolic_rate']**rxn.atp_sensitive
 
         if 'translation_capacity' in rate_scaling.keys():
-            for rxn in self.network.reactions:
+            for rxn in network.reactions:
                 rxn.rate_constant *= rate_scaling['translation_capacity']**rxn.ribosome_sensitive
 
     def odeint(self,
@@ -75,33 +84,41 @@ class Integrator:
 
         Args:
 
+            input_function (function) - returns input value(s) for given time
 
+            ic (np array) - initial conditions, defaults to zero
 
+            dt (float) - time step
+
+            duration (float) - simulation end time
+
+        Returns:
+
+            timeseries (TimeSeries)
 
         """
         from scipy.integrate import odeint
 
         # if no initial condition is provided, assume all states are zero
         if ic is None:
-            ic = np.zeros(self.network.nodes.size, dtype=np.uint32)
+            ic = np.zeros(self.N, dtype=np.uint32)
         elif type(ic) == list or type(ic) == tuple:
             ic = np.array(ic, dtype=np.uint32)
-        if len(ic) != self.network.nodes.size:
+        if len(ic) != self.N:
             raise RuntimeError('IC dimensions inconsistent with system.')
 
         # if no input function, use zeros
         if input_function is None:
-            I = self.network.input_size
-            input_value = lambda t: array('d', np.zeros(I, dtype=np.float64))
+            input_value = lambda t: array('d', np.zeros(self.I, dtype=np.float64))
         else:
             input_value = lambda t: input_function(t)
 
         # cumulative is not supported
-        cumul = array('d', np.zeros(self.network.nodes.size, dtype=np.float64))
+        cumul = array('d', np.zeros(self.N, dtype=np.float64))
 
         # define rate function
         def derivative(x, t):
-            dxdt = self.solver.cSSA.get_sp_rates(array('d', x), input_value(t), cumul)
+            dxdt = self.cSSA.get_sp_rates(array('d', x), input_value(t), cumul)
             return dxdt
 
         # run solver and compile timeseries
@@ -121,7 +138,19 @@ class Integrator:
 
         Args:
 
+            input_function (function) - returns input value(s) for given time
 
+            ic (np array) - initial conditions, defaults to zero
+
+            dt (float) - time step
+
+            duration (float) - simulation end time
+
+            method (str) - solver method
+
+        Returns:
+
+            timeseries (TimeSeries)
 
         """
         from scipy.integrate import solve_ivp
@@ -129,25 +158,24 @@ class Integrator:
 
         # if no initial condition is provided, assume all states are zero
         if ic is None:
-            ic = np.zeros(self.network.nodes.size, dtype=np.uint32)
+            ic = np.zeros(self.N, dtype=np.uint32)
         elif type(ic) == list or type(ic) == tuple:
             ic = np.array(ic, dtype=np.uint32)
-        if len(ic) != self.network.nodes.size:
+        if len(ic) != self.N:
             raise RuntimeError('IC dimensions inconsistent with system.')
 
         # if no input function, use zeros
         if input_function is None:
-            I = self.network.input_size
-            input_value = lambda t: array('d', np.zeros(I, dtype=np.float64))
+            input_value = lambda t: array('d', np.zeros(self.I, dtype=np.float64))
         else:
             input_value = lambda t: input_function(t)
 
         # cumulative is not supported
-        cumul = array('d', np.zeros(self.network.nodes.size, dtype=np.float64))
+        cumul = array('d', np.zeros(self.N, dtype=np.float64))
 
         # define rate function
         def derivative(t, x):
-            dxdt = self.solver.cSSA.get_sp_rates(array('d', x), input_value(t), cumul)
+            dxdt = self.cSSA.get_sp_rates(array('d', x), input_value(t), cumul)
             return dxdt
 
         # run solver and compile timeseries
@@ -155,24 +183,18 @@ class Integrator:
         t, y = solout['t'], solout['y']
         interpolator = interp1d(t, y)
         times = np.arange(0, duration, dt)
-        timeseries = TimeSeries(times, interpolator(times).reshape(1, self.network.nodes.size, times.size))
+        timeseries = TimeSeries(times, interpolator(times).reshape(1, self.N, times.size))
 
         return timeseries
 
-
-class Simulation(Integrator):
-    """
-    Class defines a simulation procedure.
-    """
-
-    def simulate(self,
-                 ic=None,
-                 input_function=None,
-                 integrator_ic=None,
-                 dt=1,
-                 duration=100):
+    def ssa(self,
+            ic,
+            input_function=None,
+            integrator_ic=None,
+            dt=1.,
+            duration=100.):
         """
-        Simulates dynamic system using stochastic solver.
+        Run stochastic simulation.
 
         Args:
 
@@ -188,30 +210,43 @@ class Simulation(Integrator):
 
         Returns:
 
-            times (np array) - timepoints (1 by t)
+            times (np.ndarray) - timepoints (1 by t)
 
-            states (np array) - state values at each time point (N by t)
+            states (np.ndarray) - state values at each time point (N by t)
 
         """
 
         # if no initial condition provided, assume initial states are all zero
         if ic is None:
-            ic = np.zeros(self.network.nodes.size, dtype=np.int64)
-
+            ic = np.zeros(self.N, dtype=np.uint32)
         elif type(ic) == list or type(ic) == tuple:
-            ic = np.array(ic, dtype=np.int64)
+            ic = np.array(ic, dtype=np.uint32)
+        else:
+            ic = ic.astype(np.uint32)
 
         # check that initial condition has the correct dimensions
-        assert (len(ic)==self.network.nodes.size), 'Wrong IC dimensions.'
+        assert (len(ic)==self.N), 'Wrong IC dimensions.'
 
-        # run solver
-        solout = self.solver.run(ic=ic,
-                                 input_function=input_function,
-                                 integrator_ic=integrator_ic,
-                                 dt=dt,
-                                 duration=duration)
+        # set input function
+        if input_function is None:
+            input_function = cSignal([0 for _ in range(self.I)])
+        else:
+            input_function = deepcopy(input_function)
 
-        return solout
+        # set initial condition for integrator
+        if integrator_ic is None:
+            integrator_ic = np.zeros(self.N, dtype=np.float64)
+        else:
+            integrator_ic = integrator_ic.astype(np.float64)
+
+        # run SSA
+        times, states = self.cSSA.run(ic,
+                               input_function,
+                               integrator_ic,
+                               dt=dt,
+                               duration=duration)
+
+        return times, states
 
 
 class MonteCarloSimulation(Simulation):
@@ -220,7 +255,7 @@ class MonteCarloSimulation(Simulation):
     """
 
     def __init__(self,
-                 system,
+                 network,
                  ic=None,
                  integrator_ic=None,
                  condition=None):
@@ -229,7 +264,7 @@ class MonteCarloSimulation(Simulation):
 
         Args:
 
-            system (network object)
+            network (Network)
 
             ic (array like) - initial conditions, defaults to zero
 
@@ -240,15 +275,10 @@ class MonteCarloSimulation(Simulation):
         """
 
         # instantiate simulation
-        Simulation.__init__(self, system, condition)
+        super().__init__(network, condition)
 
         # set initial condition generating functions
         self.set_initial_conditions(ic, integrator_ic)
-
-    def __repr__(self):
-        """ Print list of reactions. """
-        self.network.print_reactions()
-        return ''
 
     def set_initial_conditions(self,
                                ic=None,
@@ -264,13 +294,11 @@ class MonteCarloSimulation(Simulation):
 
         """
 
-        N = self.network.nodes.size
-
         if ic is None:
-            ic = np.zeros(N)
+            ic = np.zeros(self.N)
 
-        self.get_ic = self.build_ic_generator(ic, N)
-        self.get_integrator_ic = self.build_ic_generator(integrator_ic, N)
+        self.get_ic = self.build_ic_generator(ic, self.N)
+        self.get_integrator_ic = self.build_ic_generator(integrator_ic, self.N)
 
     @staticmethod
     def build_ic_generator(ic, N):
@@ -337,15 +365,14 @@ class MonteCarloSimulation(Simulation):
             assert (ic<0).sum() == 0, 'Failed on Trial {:d}'.format(trial)
 
             # run simulation
-            solout = self.simulate(ic=ic,
-                                   input_function=input_function,
-                                   integrator_ic=integrator_ic,
-                                   dt=dt,
-                                   duration=duration)
-            t, s = solout
-            samples.append(s)
+            times, states = self.ssa(ic=ic,
+                                     input_function=input_function,
+                                     integrator_ic=integrator_ic,
+                                     dt=dt,
+                                     duration=duration)
+            samples.append(states)
 
         # instantiate time series object
-        timeseries = TimeSeries(t, np.array(samples))
+        timeseries = TimeSeries(times, np.array(samples))
 
         return timeseries

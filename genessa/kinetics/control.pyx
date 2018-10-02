@@ -5,6 +5,9 @@ from cpython.array cimport array
 # python external imports
 import numpy as np
 from array import array
+from functools import reduce
+from operator import add
+from ..utilities import name_parameter
 
 # cython intra-package imports
 from .base cimport cSpeciesDependent
@@ -134,3 +137,105 @@ cdef class cIController(cPController):
             index += 1
 
         return activity
+
+
+#=============================== PYTHON CODE ==================================
+
+
+class SumReaction:
+
+    def __init__(self,
+                 stoichiometry,
+                 propensity,
+                 k=1,
+                 rxn_type=None,
+                 parameters=None):
+
+        self.rxn_type = rxn_type
+
+        # compile stoichiometry as a vector of coefficients
+        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
+
+        # compile propensity as a vector of coefficients
+        self.propensity = np.array(propensity, dtype=np.int64)
+        self.input_dependence = np.zeros(1, dtype=np.int64)
+
+        # set parameters
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+        k_value, k_name = name_parameter(k, 'k')
+        if 'k' not in self.parameters.keys():
+            self.parameters['k'] = k_name
+        self.k = np.array([k_value], dtype=float)
+
+        # define active species
+        self.active_species = np.where(self.propensity != 0)[0]
+        self.num_active_species = self.active_species.size
+        self._propensity = self.propensity[self.active_species]
+
+        # assign reaction rate sensitivities
+        self.temperature_sensitive = True
+        self.atp_sensitive = False
+        self.ribosome_sensitive = False
+
+    def shift(self, shift):
+        """
+
+        Expand stoichiometry and propensity vectors.
+
+        Args:
+
+            shift (int) - number of positions appended to beginning
+
+        Returns:
+
+            rxn (SumReaction) - updated reaction
+
+        """
+        s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
+        p = np.hstack((np.zeros(shift, dtype=int), self.propensity))
+        kw = dict(k=self.k[0],
+                  rxn_type=self.rxn_type,
+                  parameters=self.parameters)
+        rxn = SumReaction(s, p, **kw)
+        return rxn
+
+    def evaluate_rate(self, states, input_value=0, discrete=True):
+        """
+
+        Compute and return current rate of a given pathway.
+
+        Args:
+
+            states (np array) - current state values
+
+            discrete (bool) - if True, use discrete propensity function
+
+        Returns:
+
+            rate (float) - rate of reaction
+
+        """
+
+        # get active states and propensities
+        _states = states[self.active_species]
+
+        # get reactant activities
+        activities = _states * self._propensity
+
+        # incorporate input dependence
+        rate = self.k * reduce(add, activities)
+
+        if rate < 0:
+            rate *= 0
+
+        return rate
+
+
+class ProportionalController(SumReaction):
+    pass
+
+
+class IntegralController(SumReaction):
+    pass

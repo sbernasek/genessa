@@ -6,7 +6,8 @@ from cpython.array cimport array
 import numpy as np
 from array import array
 from functools import reduce
-from operator import add
+from operator import add, mul
+from ..utilities import name_parameter
 
 # cython intra-package imports
 from .coupling cimport cSDRepressor, cCoupling, cRxnMap
@@ -348,3 +349,167 @@ cdef class cRxnMap:
                 edge = self.values.data.as_uints[index]
                 f(coupling_obj, edge, states)
                 index += 1
+
+
+#=============================== PYTHON CODE ==================================
+
+
+class Coupling:
+
+    def __init__(self,
+                 stoichiometry=None,
+                 propensity=None,
+                 k=1,
+                 a=1,
+                 w=1,
+                 repressors=None,
+                 rxn_type='coupling',
+                 parameters=None):
+        """
+        Class describes a single coupling pathway.
+
+        Args:
+
+            stoichiometry (array like) - list of stoichiometric coefficients for all species
+
+            propensity (array like) - weights for coupling comparison
+
+            k (float) - baseline rxn rate
+
+            a (float) - coupling strength
+
+            w (float) - edge weights
+
+            repressors (list) - list of repressor objects
+
+            rxn_type (str) - name of reaction
+
+        """
+
+        self.rxn_type = rxn_type
+
+        # define stoichiometry
+        if stoichiometry is None:
+            stoichiometry = [0]
+        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
+
+        # define input dependence (not used)
+        self.input_dependence = np.zeros(1, dtype=np.int64)
+
+        # define rate law parameters
+        if propensity is None:
+            propensity = np.zeros(len(stoichiometry))
+        self.propensity = np.array(propensity, dtype=np.float64)
+
+        # set parameters
+        if parameters is None:
+            parameters = {}
+        self.parameters = parameters
+
+        k_value, k_name = name_parameter(k, 'k')
+        if 'k' not in self.parameters.keys():
+            self.parameters['k'] = k_name
+        self.k = np.array([k_value], dtype=float)
+
+        a_value, a_name = name_parameter(a, 'a')
+        if 'a' not in self.parameters.keys():
+            self.parameters['a'] = a_name
+        self.a = a_value
+
+        w_value, w_name = name_parameter(w, 'w')
+        if 'w' not in self.parameters.keys():
+            self.parameters['w'] = w_name
+        self.w = w_value
+
+        # add repressors
+        if repressors is None:
+            self.repressors = []
+        else:
+            self.repressors = repressors
+        self.num_repressors = len(self.repressors)
+
+        # identify participating substrates
+        self.active_species = np.where(self.propensity != 0)[0]
+        self._propensity = self.propensity[self.active_species]
+        self.num_active_species = self.active_species.size
+
+        # assign reaction rate sensitivities
+        self.temperature_sensitive = True
+        self.atp_sensitive = False
+        self.ribosome_sensitive = False
+
+    def shift(self, shift):
+        """
+
+        Expand stoichiometry and propensity vectors.
+
+        Args:
+
+            shift (int) - number of positions appended to beginning
+
+        Returns:
+
+            rxn (Coupling) - updated reaction
+
+        """
+
+        s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
+        p = np.hstack((np.zeros(shift, dtype=np.float64), self.propensity))
+
+        # shift repressors
+        repressors = [rep.shift(shift) for rep in self.repressors]
+
+        kw = dict(k=self.k[0],
+                  a=self.a,
+                  w=self.w,
+                  parameter_names=self.parameter_names,
+                  repressors=repressors,
+                  rxn_type=self.rxn_type)
+
+        return Coupling(s, p, **kw)
+
+    def add_repressor(self, repressor):
+        """
+        Adds repressor to reaction.
+
+        Parameters:
+            repressor (EnzymaticRepressor object) - repressor to be added to enzymatic reaction
+        """
+        self.repressors.append(repressor)
+        self.num_repressors += 1
+
+    def evaluate_rate(self, states, input_state, **kwargs):
+        """
+        Returns rate for given state and input values.
+
+        Args:
+
+            states (np array) - current state values
+
+            input_state (np array) - current input value(s)
+
+        Returns:
+
+            rate (float) - rate of reaction
+
+        """
+
+        # get substrate activity
+        rate = 0
+        if self._propensity.size != 0:
+            rate += (self._propensity * states[self.active_species]).sum()
+            N = self.active_species.size
+            rate *= (self.a*self.w / (1+self.w * (N - 1)))
+
+        # add constant term
+        rate += self.k[0]
+
+        # get repressor inhibition effects
+        unoccupied_sites = 1
+        if self.num_repressors > 0:
+            unoccupied_sites = reduce(mul, [1-repressor.get_occupancy(states, input_state) for repressor in self.repressors])
+
+        # get overall rate
+        rate = unoccupied_sites * rate
+
+        return rate

@@ -7,7 +7,10 @@ import numpy as np
 
 # import intra-package cython dependencies
 from .networks cimport cStoichiometry, cNetwork
-from .rxns cimport cRateFunction
+from .rates cimport cRates
+
+# import intra-package python dependencies
+from .rates import Rates
 
 
 cdef class cStoichiometry:
@@ -61,7 +64,7 @@ cdef class cNetwork:
 
         S (cStoichiometry) - stoichiometry for all reactions
 
-        R (cRateFunction) - rate function for all reactions
+        R (cRates) - rate function for all reactions
 
     """
 
@@ -70,12 +73,43 @@ cdef class cNetwork:
                  unsigned int M,
                  unsigned int I,
                  cStoichiometry S,
-                 cRateFunction R):
+                 cRates R):
         self.N = N
         self.M = M
         self.I = I
         self.S = S
         self.R = R
+
+    @staticmethod
+    def from_network(network):
+        """
+        Instantiate from python network.
+
+        Args:
+
+            network (Network)
+
+        Returns:
+
+            c_network (cNetwork)
+
+        """
+
+        # sort rxns and compile stoichiometry
+        network.sort_rxns()
+        network.resize_inputs()
+        network.compile_stoichiometry()
+
+        # typecast network features
+        N = network.nodes.size
+        M = len(network.reactions)
+        I = network.input_size
+
+        # get cythonized rate function and network
+        S = cStoichiometry.from_array(network.stoichiometry)
+        R = Rates.compile_c_rate_function(network)
+
+        return cNetwork(N, M, I, S, R)
 
     cdef array get_rxn_rates(self):
         return self.R.rates

@@ -1,4 +1,5 @@
 from .cells import Cell
+
 from .networks import MutableNetwork
 from .algorithms import MonteCarloSimulation
 from .timeseries import GaussianModel
@@ -6,50 +7,6 @@ from .reactions import Reaction, EnzymaticReaction
 from .parameters import two_state_model_defaults, hill_model_defaults
 
 
-class TwoStateModel(MutableNetwork):
-    """
-    Creates a network exhibiting the two-state model of transcription followed by linear protein synthesis.
-
-    System dimensions:
-        0: DNA_off
-        1: DNA_on
-        2: mRNA
-        3: Protein
-        4-9: null
-    """
-
-    def __init__(self, rate_constants=None):
-
-        self.name = 'Two State Model'
-
-        # if no rate constants provided, use defaults
-        rc = rate_constants
-        if rate_constants is None:
-            rc = two_state_model_defaults
-
-        # assign rate constants
-        k_activation, k_transcription, k_translation = rc['k_activation'], rc['k_transcription'], rc['k_translation']
-        gamma_d, gamma_r, gamma_p = rc['gamma_d'], rc['gamma_r'], rc['gamma_p']
-
-        # define reactions
-        rxns = [
-
-            # dna activation/deactivation
-            Reaction(stoichiometry=[-1, 1, 0, 0, 0, 0, 0, 0, 0, 0], input_dependence=1, k=k_activation),
-            Reaction(stoichiometry=[1, -1, 0, 0, 0, 0, 0, 0, 0, 0], input_dependence=0, k=gamma_d),
-
-            # transcript synthesis/decay
-            Reaction(stoichiometry=[0, 0, 1, 0, 0, 0, 0, 0, 0, 0], propensity=[0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-                     k=k_transcription, atp_sensitive=True),
-            Reaction(stoichiometry=[0, 0, -1, 0, 0, 0, 0, 0, 0, 0], k=gamma_r),
-
-            # protein synthesis/decay
-            Reaction(stoichiometry=[0, 0, 0, 1, 0, 0, 0, 0, 0, 0], propensity=[0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-                     k=k_translation, atp_sensitive=True, ribosome_sensitive=True),
-            Reaction(stoichiometry=[0, 0, 0, -1, 0, 0, 0, 0, 0, 0], k=gamma_p)]
-
-        # instantiate cell with two-state model
-        MutableNetwork.__init__(self, nodes=10, reactions=rxns)
 
 
 class HillModel(MutableNetwork):
