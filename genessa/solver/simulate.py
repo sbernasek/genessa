@@ -9,6 +9,7 @@ from copy import deepcopy
 from .ssa import cSSA
 from .timeseries import TimeSeries
 from ..parameters import conditions
+from ..signals.signals import cSignal
 
 
 class Simulation:
@@ -38,9 +39,9 @@ class Simulation:
                 self.apply_rate_scaling(network, condition)
 
         # store system dimensions
-        self.N = network.nodes.size
-        self.M = len(network.reactions)
-        self.I = network.input_size
+        self.N = network.N
+        self.M = network.M
+        self.I = network.I
 
         # instantiate cython solver
         self.cSSA = cSSA.from_network(network)

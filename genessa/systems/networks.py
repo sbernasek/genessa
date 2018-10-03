@@ -57,13 +57,21 @@ class Network:
         self.stoichiometry = None
 
         # set system size attributes
-        self.N = N
-        self.M = len(self.reactions)
         self.I = I
 
     def __repr__(self):
         """ Print tabulated summary of reactions. """
         return self.print_reactions()
+
+    @property
+    def N(self):
+        """ Number of nodes. """
+        return self.nodes.size
+
+    @property
+    def M(self):
+        """ Number of reactions. """
+        return len(self.reactions)
 
     def print_reactions(self):
         """ Print tabulated summary of reactions. """

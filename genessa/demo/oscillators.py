@@ -3,7 +3,7 @@ from copy import deepcopy
 
 # intra-package python imports
 from ..kinetics.hill import Repressor
-from ..kinetics.coupled import Coupling
+from ..kinetics.coupling import Coupling
 from ..models.coupled import CoupledCell, CoupledCells
 
 
@@ -51,7 +51,7 @@ class Oscillator(CoupledCell):
 
         """
 
-        super().__init__(1)
+        super().__init__()
         p = self.get_default_parameters(omega)
         p = self.add_parameter_names(p)
         self.p = p

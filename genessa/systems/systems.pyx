@@ -101,9 +101,9 @@ cdef class cSystem:
         network.compile_stoichiometry()
 
         # typecast network features
-        N = network.nodes.size
-        M = len(network.reactions)
-        I = network.input_size
+        N = network.N
+        M = network.M
+        I = network.I
 
         # get cythonized rate function and network
         S = cStoichiometry.from_array(network.stoichiometry)

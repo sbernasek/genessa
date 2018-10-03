@@ -83,7 +83,7 @@ class Cell(Network):
 
         # if IC is none, assume all genes in ground state
         if ic is None:
-            ic = np.zeros(self.nodes.size, dtype=np.int64)
+            ic = np.zeros(self.N, dtype=np.int64)
 
         # if IC is mean,var tuple, sample ICs from gaussian
         elif type(ic) == tuple:
@@ -122,7 +122,7 @@ class Cell(Network):
         gene = Gene(**kwargs)
 
         # update nodes and reactions
-        shift = self.nodes.size
+        shift = self.N
         added_node_ids = np.arange(shift, shift+gene.nodes.size)
         self.update_reaction_dimensions(added_node_ids=added_node_ids)
 
@@ -163,7 +163,7 @@ class Cell(Network):
         """
 
         # update nodes and reactions
-        node_id = self.nodes.size
+        node_id = self.N
         added_node_ids = np.arange(node_id, node_id+1)
         self.update_reaction_dimensions(added_node_ids=added_node_ids)
 
@@ -177,10 +177,10 @@ class Cell(Network):
         self.phosphorylated.update({base: node_id})
 
         # add forward reaction
-        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry = np.zeros(self.N, dtype=np.int64)
         stoichiometry[self.proteins[base]] = -1
         stoichiometry[node_id] = 1
-        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity = np.zeros(self.N, dtype=np.int64)
         propensity[self.proteins[base]] = 1
         activation = Hill(stoichiometry,
                           propensity,
@@ -190,7 +190,7 @@ class Cell(Network):
                           rxn_type=base.upper()+' phosphorylation')
 
         # add reverse reaction
-        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity = np.zeros(self.N, dtype=np.int64)
         propensity[node_id] = 1
         deactivation = Hill(-stoichiometry,
                             propensity,
@@ -200,7 +200,7 @@ class Cell(Network):
                             rxn_type=name+' dephosphorylation')
 
         # add decay
-        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry = np.zeros(self.N, dtype=np.int64)
         stoichiometry[node_id] = -1
         decay = MassAction(stoichiometry,
                            None,
@@ -241,7 +241,7 @@ class Cell(Network):
         if name is None:
             name = '-'.join([p1, p2])
 
-        dimer_id = self.nodes.size
+        dimer_id = self.N
         added_node_ids = np.arange(dimer_id, dimer_id+1)
         self.update_reaction_dimensions(added_node_ids=added_node_ids)
         self.nodes = np.append(self.nodes, added_node_ids)
@@ -249,7 +249,7 @@ class Cell(Network):
 
         # get base species
         base1, base2 = self.proteins[p1], self.proteins[p2]
-        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry = np.zeros(self.N, dtype=np.int64)
         stoichiometry[base1] = -1
         stoichiometry[base2] = -1
         stoichiometry[dimer_id] = 1
@@ -258,7 +258,7 @@ class Cell(Network):
         rev = MassAction(-stoichiometry, None, None, kr, rxn_type=rev_name)
 
         # add decay
-        s = np.zeros(self.nodes.size, dtype=np.int64)
+        s = np.zeros(self.N, dtype=np.int64)
         s[dimer_id] = -1
         decay = MassAction(s, k=g, rxn_type='{:s} decay'.format(name))
 
@@ -294,7 +294,7 @@ class Cell(Network):
         if name is None:
             name = 'n'+base
 
-        node_id = self.nodes.size
+        node_id = self.N
         added_node_ids = np.arange(node_id, node_id+1)
         self.update_reaction_dimensions(added_node_ids=added_node_ids)
         self.nodes = np.append(self.nodes, added_node_ids)
@@ -302,14 +302,14 @@ class Cell(Network):
 
         # get base species
         base_id = self.proteins[base]
-        stoich = np.zeros(self.nodes.size, dtype=np.int64)
+        stoich = np.zeros(self.N, dtype=np.int64)
         stoich[base_id] = -1
         stoich[node_id] = 1
         fwd = MassAction(stoich, None, None, kf, rxn_type=base+' import')
         rev = MassAction(-stoich, None, None, kr, rxn_type=base+' export')
 
         # add decay
-        stoich = np.zeros(self.nodes.size, dtype=np.int64)
+        stoich = np.zeros(self.N, dtype=np.int64)
         stoich[node_id] = -1
         decay = MassAction(stoich, k=g, rxn_type='{:s} decay'.format(name))
 
@@ -339,9 +339,9 @@ class Cell(Network):
         """
 
         # create reaction for target
-        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry = np.zeros(self.N, dtype=np.int64)
         stoichiometry[self.transcripts[target]] = -1
-        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity = np.zeros(self.N, dtype=np.int64)
 
         # determine input dependence
         if 'IN' not in actuator:
@@ -390,9 +390,9 @@ class Cell(Network):
         """
 
         # create reaction for target
-        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry = np.zeros(self.N, dtype=np.int64)
         stoichiometry[self.proteins[target]] = -1
-        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity = np.zeros(self.N, dtype=np.int64)
         rxn_name = target+'  deg.'
 
         # determine input dependence

@@ -398,8 +398,8 @@ class Rates:
             network (Network)
 
         """
-        self.N = network.nodes.size
-        self.M = len(network.reactions)
+        self.N = network.N
+        self.M = network.M
         self.reactions = network.reactions
 
         # compile cRates
@@ -537,7 +537,7 @@ class Rates:
                 rxn_types.append(0)
                 coupling.append(rxn)
 
-            elif rxn.__class__.__name__ == 'Reaction':
+            elif rxn.__class__.__name__ == 'MassAction':
                 rxn_types.append(1)
                 massaction.append(rxn)
 
@@ -634,7 +634,7 @@ class Rates:
         elif maptype == 'modules':
             p_dict = cls.get_module_dependence_dict(network)
 
-        adict = {i: [] for i in range(len(network.reactions))}
+        adict = {i: [] for i in range(network.M)}
         for (i, rxn) in enumerate(network.reactions):
             list_of_lists = [p_dict[s] for s in rxn.stoichiometry.nonzero()[0]]
             if len(list_of_lists) > 0:
@@ -727,7 +727,7 @@ class Rates:
     @staticmethod
     def get_input_map(network):
         """ Map inputs to reactions. """
-        adict = {i: [] for i in range(network.input_size)}
+        adict = {i: [] for i in range(network.I)}
         for (j, rxn) in enumerate(network.reactions):
             rxn_type = rxn.__class__.__name__
             if rxn_type in ('Coupling', 'SumReaction', 'ProportionalController', 'IntegralController'):
@@ -743,7 +743,7 @@ class Rates:
     @staticmethod
     def get_perturbation_map(network):
         """ Map signal dimensions to perturbed reactions. """
-        adict = {i: [] for i in range(network.input_size)}
+        adict = {i: [] for i in range(network.I)}
         for (j, rxn) in enumerate(network.reactions):
             rxn_type = rxn.__class__.__name__
             if rxn_type == 'Transcription':
