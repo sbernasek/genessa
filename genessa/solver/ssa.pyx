@@ -1,7 +1,7 @@
 # cython: profile=False
 
 # cython intra-package imports
-from ..signals.signals cimport cSquarePulse, cMultiPulse, cSquareWave, cSignal
+from ..signals.signals cimport cSignalType, cSignal
 from ..systems.systems cimport cSystem, cStoichiometry
 
 # python intra-package imports
@@ -170,7 +170,7 @@ cdef class cSSA:
 
     cpdef tuple run(self,
                     unsigned int[::1] ic,
-                    cSignal signal,
+                    cSignalType signal,
                     double[::1] integrator_ic,
                     double dt=1.,
                     double duration=100):
@@ -181,7 +181,7 @@ cdef class cSSA:
 
             ic (int[:]) - initial state values
 
-            signal (cSignal) - function returning input values for a given time
+            signal (cSignalType) - function returning input values
 
             integrator_ic (int[:]) - initial integrator values
 
@@ -228,7 +228,7 @@ cdef class cSSA:
         return times, states
 
     cdef void c_run(self,
-                    cSignal signal,
+                    cSignalType signal,
                     double dt=1.,
                     double duration=100) nogil:
         """
@@ -236,7 +236,7 @@ cdef class cSSA:
 
         Args:
 
-            signal (cSignal) - function returning input values for a given time
+            signal (cSignalType) - function returning input values
 
             dt (double) - sampling interval
 
@@ -355,7 +355,7 @@ cdef class cSSA:
         return choose_rxn(order, rxn_rates, self.system.M, total_rate, rfloat)
 
     cdef array get_input_value(self,
-                               cSignal input_function,
+                               cSignalType input_function,
                                double t):
         return input_function.get_signal(t)
 

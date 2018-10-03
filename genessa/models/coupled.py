@@ -1,6 +1,8 @@
 import numpy as np
+from copy import deepcopy
 
 # intra-package python imports
+from ..systems.networks import Network
 from ..kinetics.hill import Repressor
 from ..kinetics.coupling import Coupling
 from .cells import Cell
@@ -143,7 +145,7 @@ class CoupledCells(CoupledCell):
         reactions = self.get_reactions(cell, replicates)
 
         # instantiate population wide network
-        Network.__init__(self, self.cell.N*replicates, reactions=reactions)
+        Network.__init__(self, self.template.N*replicates, reactions=reactions)
 
         # expand labels
         self.expand_labels()
@@ -214,8 +216,8 @@ class CoupledCells(CoupledCell):
                 if rxn.__class__.__name__ == 'MassAction':
                     expanded_rxn = rxn.__class__(input_dependence=rxn.input_dependence, k=rxn.k[0], **kw)
 
-                # add Repressor
-                elif rxn.__class__.__name__ == 'Repressor':
+                # add Hill reaction
+                elif rxn.__class__.__name__ == 'Hill':
 
                     # shift repressors
                     repressors = []
@@ -314,7 +316,7 @@ class CoupledCells(CoupledCell):
 
         # define synthesis reaction
         rxn = Coupling(stoichiometry,
-                       p,
+                       propensity,
                        k=k,
                        a=a,
                        w=w,

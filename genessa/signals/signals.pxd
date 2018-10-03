@@ -22,3 +22,9 @@ cdef class cMultiPulse(cSignal):
 cdef class cSquareWave(cSignal):
     cdef double period
     cdef array on, off
+
+ctypedef fused cSignalType:
+    cSignal
+    cSquarePulse
+    cMultiPulse
+    cSquareWave

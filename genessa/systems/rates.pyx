@@ -1,8 +1,9 @@
 # cython: profile=False
 
 """
-TO DO:
+TO DO: DDOOOOOOO
 - convert .data.as_doubles to raw pointers
+- generalize rxn types, see if can use fused types to remove explicitly declaring all of them
 """
 
 # cython external imports
