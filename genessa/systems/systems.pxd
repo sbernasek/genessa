@@ -3,15 +3,7 @@ from cpython.array cimport array
 
 # import intra-package cython dependencies
 from .rates cimport cRates
-
-
-cdef class cStoichiometry:
-
-    # attributes
-    cdef array index
-    cdef array lengths
-    cdef array species
-    cdef array coefficients
+from .stoichiometry cimport cStoichiometry
 
 
 cdef class cSystem:

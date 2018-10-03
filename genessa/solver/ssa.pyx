@@ -504,15 +504,15 @@ cdef class cSSA:
             states (unsigned int*) - current state values
 
         """
-        cdef unsigned int N = self.system.S.lengths.data.as_uints[rxn]
-        cdef unsigned int index = self.system.S.index.data.as_uints[rxn]
+        cdef unsigned int N = self.system.S.lengths[rxn]
+        cdef unsigned int index = self.system.S.index[rxn]
         cdef unsigned int count, species
         cdef int coefficient
 
         # update each state
         for count in xrange(N):
-            species = self.system.S.species.data.as_uints[index]
-            coefficient = self.system.S.coefficients.data.as_longs[index]
+            species = self.system.S.species[index]
+            coefficient = self.system.S.coefficients[index]
             states[species] += (coefficient * extent)
             index += 1
 

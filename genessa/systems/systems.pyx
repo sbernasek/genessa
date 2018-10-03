@@ -6,47 +6,12 @@ from cpython.array cimport array
 import numpy as np
 
 # import intra-package cython dependencies
-from .systems cimport cStoichiometry, cSystem
 from .rates cimport cRates
+from .stoichiometry cimport cStoichiometry
+from .systems cimport cSystem
 
 # import intra-package python dependencies
 from .rates import Rates
-
-
-cdef class cStoichiometry:
-    """
-    Cython hash table containing stoichiometric coefficients for all reactions in a network.
-
-    Attributes:
-
-        index (array[unsigned int]) - start index for each reaction
-
-        lengths (array[unsigned int]) - number of nonzero coefficients for each reaction
-
-        species (array[unsigned int]) - node index for each coefficient
-
-        coefficients (array[long]) - coefficient values
-
-    """
-
-    def __init__(self, unsigned int[:] index,
-                       unsigned int[:] lengths,
-                       unsigned int[:] species,
-                       long[:] coefficients):
-
-        self.index = array('I', index)
-        self.lengths = array('I', lengths)
-        self.species = array('I', species)
-        self.coefficients = array('l', coefficients)
-
-    @staticmethod
-    def from_array(np.ndarray stoichiometry):
-        """ Instantiate from N x M stoichiometry array. """
-        rxns, species = stoichiometry.T.nonzero()
-        lengths = np.bincount(rxns).astype(np.uint32)
-        index = np.hstack((np.zeros(1), np.cumsum(lengths))).astype(np.uint32)
-        coefficients = stoichiometry.T[(rxns, species)].astype(np.int64)
-        return cStoichiometry(index, lengths, species.astype(np.uint32), coefficients)
 
 
 cdef class cSystem:
@@ -155,13 +120,13 @@ cdef class cSystem:
         # for each reaction
         for rxn in xrange(self.M):
             rxn_rate = rxn_rates.data.as_doubles[rxn]
-            N = self.S.lengths.data.as_uints[rxn]
-            index = self.S.index.data.as_uints[rxn]
+            N = self.S.lengths[rxn]
+            index = self.S.index[rxn]
 
             # update each active state
             for count in xrange(N):
-                species = self.S.species.data.as_uints[index]
-                coefficient = self.S.coefficients.data.as_longs[index]
+                species = self.S.species[index]
+                coefficient = self.S.coefficients[index]
                 rates.data.as_doubles[species] += (coefficient * rxn_rate)
                 index += 1
 
