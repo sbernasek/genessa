@@ -48,10 +48,24 @@ cdef class cPController(cSpeciesDependent):
                                      array states) nogil:
         return self.get_species_activity_sum(rxn, states)
 
-    cdef double update(self,
-                       unsigned int rxn,
-                       array states) nogil:
-        """ Update rate of specified reaction. """
+    cdef double evaluate_rxn_rate(self,
+                                   unsigned int rxn,
+                                   array states) nogil:
+        """
+        Evaluates and returns rate for specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - index of reaction
+
+            states (array[unsigned int]) - state values
+
+        Returns:
+
+            rate (double) - reaction rate
+
+        """
+
         cdef double species_activity, rate
 
         # compute species activities
@@ -62,13 +76,25 @@ cdef class cPController(cSpeciesDependent):
         if rate < 0:
             rate = 0.
 
-        #self.rates.data.as_doubles[rxn] = rate
         return rate
 
-    cdef double cget_rate(self,
-                          unsigned int rxn,
-                          array states) nogil:
-        """ Get rate of specified reaction """
+    cdef double c_evaluate_rate(self,
+                                unsigned int rxn,
+                                array states) nogil:
+        """
+        Evaluates and returns rate of specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+            states (array[double]) - state values
+
+        Returns:
+
+            rate (float) - reaction rate
+
+        """
 
         cdef unsigned int count, ind
         cdef double n, value

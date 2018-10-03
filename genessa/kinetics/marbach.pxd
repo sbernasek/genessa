@@ -28,13 +28,29 @@ cdef class cRegulatoryModule:
     # methods
     @staticmethod
     cdef cRegulatoryModule get_blank_cRegulatoryModule(unsigned int M)
+
     @staticmethod
-    cdef cRegulatoryModule from_list(list rxns, dict rxn_map)
-    cdef double set_fractional_activation(self, unsigned int mod, array states) nogil
-    cdef void set_activation(self, unsigned int mod, array states) nogil
-    cdef double get_activation(self, unsigned int mod) nogil
-    cdef void update(self, array states, unsigned int fired) nogil
-    cdef double cget_activation(self, array states, unsigned int mod) nogil
+    cdef cRegulatoryModule from_list(list rxns,
+                                     dict rxn_map)
+
+    cdef double set_fractional_activation(self,
+                                          unsigned int mod,
+                                          array states) nogil
+
+    cdef void set_activation(self,
+                             unsigned int mod,
+                             array states) nogil
+
+    cdef double get_activation(self,
+                               unsigned int mod) nogil
+
+    cdef void update(self,
+                     array states,
+                     unsigned int fired) nogil
+
+    cdef double cget_activation(self,
+                                array states,
+                                unsigned int mod) nogil
 
 
 cdef class cTranscription:
@@ -58,14 +74,35 @@ cdef class cTranscription:
     # methods
     @staticmethod
     cdef cTranscription get_blank_cTranscription(unsigned int M)
+
     @staticmethod
-    cdef cTranscription from_list(list rxns, dict rxn_map)
-    cdef double apply_perturbation(self, unsigned int rxn, double ptb) nogil
-    cdef double remove_perturbation(self, unsigned int rxn) nogil
-    cdef double get_activation(self, unsigned int rxn, array states) nogil
-    cdef double get_rate_modifier(self, unsigned int rxn, array input_values) nogil
-    cdef double update(self, unsigned int rxn, array states, array input_values) nogil
-    cdef double cget_rate(self, unsigned int rxn, array states, array input_values) nogil
+    cdef cTranscription from_list(list rxns,
+                                  dict rxn_map)
+
+    cdef double apply_perturbation(self,
+                                   unsigned int rxn,
+                                   double ptb) nogil
+
+    cdef double remove_perturbation(self,
+                                    unsigned int rxn) nogil
+
+    cdef double get_activation(self,
+                               unsigned int rxn,
+                               array states) nogil
+
+    cdef double get_rate_modifier(self,
+                                  unsigned int rxn,
+                                  array input_values) nogil
+
+    cdef double evaluate_rxn_rate(self,
+                                 unsigned int rxn,
+                                 array states,
+                                 array inputs) nogil
+
+    cdef double c_evaluate_rate(self,
+                                unsigned int rxn,
+                                array states,
+                                array inputs) nogil
 
 
 ctypedef void (*cSetActivation)(cRegulatoryModule, unsigned int, array) nogil
@@ -77,4 +114,8 @@ cdef class cRxnMap:
     cdef array ind, lengths, values
 
     # methods
-    cdef void app(self, cRegulatoryModule mod_obj, unsigned int key, cSetActivation f, array states) nogil
+    cdef void app(self,
+                  cRegulatoryModule mod_obj,
+                  unsigned int key,
+                  cSetActivation f,
+                  array states) nogil

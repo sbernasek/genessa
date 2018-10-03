@@ -2,7 +2,7 @@
 
 # cython intra-package imports
 from ..signals.signals cimport cSquarePulse, cMultiPulse, cSquareWave, cSignal
-from ..systems.networks cimport cNetwork, cStoichiometry
+from ..systems.systems cimport cSystem, cStoichiometry
 
 # python intra-package imports
 
@@ -55,7 +55,7 @@ cdef class cSSA:
 
     Attributes:
 
-        network (cNetwork) - system of nodes and reactions
+        system (cSystem) - system of nodes and reactions
 
         states (array[unsigned int]) - state values for each node
 
@@ -71,31 +71,31 @@ cdef class cSSA:
 
     """
 
-    cdef cNetwork network
+    cdef cSystem system
     cdef bint integrate
     cdef bint null_input
     cdef array states, inputs, cumul, rxn_order
     cdef array rstates
 
-    def __init__(self, cNetwork network):
+    def __init__(self, cSystem system):
 
         # add network
-        self.network = network
+        self.system = system
 
         # set flags
-        if network.R.icontrol.M == 0:
+        if system.R.icontrol.M == 0:
             self.integrate = 0
         else:
             self.integrate = 1
 
         # instantiate arrays for simulation variables
-        self.states = array('I', np.zeros(network.N, dtype=np.uint32))
-        self.inputs = array('d', np.zeros(network.I, dtype=np.int64))
-        self.cumul = array('d', np.zeros(network.N, dtype=np.int64))
-        self.rxn_order = array('I', np.arange(network.M, dtype=np.uint32))
+        self.states = array('I', np.zeros(system.N, dtype=np.uint32))
+        self.inputs = array('d', np.zeros(system.I, dtype=np.int64))
+        self.cumul = array('d', np.zeros(system.N, dtype=np.int64))
+        self.rxn_order = array('I', np.arange(system.M, dtype=np.uint32))
 
         # initialize array for regular states
-        self.rstates = array('I', np.zeros(network.N, dtype=np.uint32))
+        self.rstates = array('I', np.zeros(system.N, dtype=np.uint32))
 
     @staticmethod
     def from_network(network):
@@ -111,37 +111,61 @@ cdef class cSSA:
             c_ssa (cSSA)
 
         """
-        return cSSA(cNetwork.from_network(network))
+        return cSSA(cSystem.from_network(network))
 
-    cpdef array get_sp_rates(self,
-                             array states,
-                             array inputs,
-                             array cumul):
-        """ Returns continuous species rates. """
-        cdef array rates = array('d', self.network.N*[0.])
-        self.network.cset_species_rates(states, inputs, cumul, rates)
-        return rates
+    cpdef array evaluate_species_rates(self,
+                                       array states,
+                                       array inputs,
+                                       array cumulative):
+        """
+        Evaluates and returns rate of change for all species.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            inputs (array[double]) - input values
+
+            cumulative (array[double]) - integrator values
+
+        Returns:
+
+            rates (array[double]) - species rates, e.g. dX/dt
+
+        """
+        return self.system.c_evaluate_species_rates(states, inputs, cumulative)
 
     cdef void set_states(self, array x) nogil:
+        """ Set state values. """
         cdef unsigned int index
-        for index in xrange(self.network.N):
+        for index in xrange(self.system.N):
             self.states.data.as_uints[index] = x.data.as_uints[index]
 
     cdef void set_inputs(self, array x) nogil:
+        """ Set input values. """
         cdef unsigned int index
-        for index in xrange(self.network.I):
+        for index in xrange(self.system.I):
             self.inputs.data.as_doubles[index] = x.data.as_doubles[index]
 
-    cdef void set_cumul(self, array x) nogil:
+    cdef void set_cumulative(self, array x) nogil:
+        """ Set integrator values. """
         cdef unsigned int index
-        for index in xrange(self.network.N):
+        for index in xrange(self.system.N):
             self.cumul.data.as_doubles[index] = x.data.as_doubles[index]
 
     cdef void set_rxn_order(self, array rates):
+        """
+        Order reactions by reaction rate.
+
+        Args:
+
+            rates (array[double]) - reaction rates
+
+        """
         cdef unsigned int index = 0
         cdef unsigned int rxn
         cdef array order = array('I', np.argsort(rates).astype(np.uint32)[::-1])
-        for index in xrange(self.network.M):
+        for index in xrange(self.system.M):
             self.rxn_order.data.as_uints[index] = order.data.as_uints[index]
 
     cpdef tuple run(self,
@@ -150,11 +174,32 @@ cdef class cSSA:
                     double[::1] integrator_ic,
                     double dt=1.,
                     double duration=100):
-        """ Python interface for SSA. """
+        """
+        Python interface for stochastic simulation.
+
+        Args:
+
+            ic (int[:]) - initial state values
+
+            signal (cSignal) - function returning input values for a given time
+
+            integrator_ic (int[:]) - initial integrator values
+
+            dt (double) - sampling interval
+
+            duration (double) - simulation length
+
+        Returns:
+
+            times (np.ndarray[double]) - timepoints, length T
+
+            states (np.ndarray[long]) - interpolated state values, shaped (N,T)
+
+        """
 
         # initialize times and state lists, simulation counters
         self.set_states(array('I', ic))
-        self.set_cumul(array('d', integrator_ic))
+        self.set_cumulative(array('d', integrator_ic))
 
         # initialize input
         self.null_input = 0
@@ -164,13 +209,13 @@ cdef class cSSA:
         self.set_inputs(signal.get_signal(0))
 
         # initialize all rates and sort order
-        self.network.update_all(self.states, self.inputs, self.cumul)
-        cdef array rxn_rates = self.network.get_rxn_rates()
+        self.system.R.update_all(self.states, self.inputs, self.cumul)
+        cdef array rxn_rates = self.system.get_rxn_rates()
         self.set_rxn_order(rxn_rates)
 
         # preallocate regular states array to record simulation history
         cdef unsigned int num_timepoints = <unsigned int>ceil(duration/dt)
-        rstates = np.empty((self.network.N, num_timepoints), dtype=np.uint32)
+        rstates = np.empty((self.system.N, num_timepoints), dtype=np.uint32)
         self.rstates = array('I', rstates.flatten())
 
         # run stochastic simulation
@@ -178,7 +223,7 @@ cdef class cSSA:
 
         #return numpy arrays
         cdef np.ndarray times = np.arange(0, duration, dt)
-        cdef np.ndarray states = np.frombuffer(self.rstates, dtype=np.uint32).reshape(self.network.N, num_timepoints)
+        cdef np.ndarray states = np.frombuffer(self.rstates, dtype=np.uint32).reshape(self.system.N, num_timepoints)
 
         return times, states
 
@@ -187,15 +232,15 @@ cdef class cSSA:
                     double dt=1.,
                     double duration=100) nogil:
         """
-        Run Gillespie SSA.
+        Run Gillespie SSA in pure cython.
 
         Args:
 
-            signal (cSignal object)
+            signal (cSignal) - function returning input values for a given time
 
-            dt (double) - timestep used for interpolation
+            dt (double) - sampling interval
 
-            duration (double) - simulation duration
+            duration (double) - simulation length
 
         """
 
@@ -226,11 +271,11 @@ cdef class cSSA:
 
             # update stored state values
             while t >= threshold:
-                for s_index in xrange(self.network.N):
+                for s_index in xrange(self.system.N):
                     self.rstates.data.as_uints[s_index*num_timepoints+t_index] = self.states.data.as_uints[s_index]
                 threshold += dt
                 t_index += 1
-                #self.set_rxn_order(self.network.R.rates)
+                #self.set_rxn_order(self.system.R.rates)
 
             # update input value
             if self.null_input == 0:
@@ -239,17 +284,23 @@ cdef class cSSA:
                 signal.update(t)
 
                 # check if input changed and input rates accordingly
-                for index in xrange(self.network.I):
+                for index in xrange(self.system.I):
                     changed = signal.compare_value(self.inputs, index)
                     if changed == 1:
                         self.inputs.data.as_doubles[index] = signal.value.data.as_doubles[index]
-                        self.network.update_input(self.states, self.inputs, self.cumul, index)
+                        self.system.R.update_after_input_change(self.states,
+                                                               self.inputs,
+                                                               self.cumul,
+                                                               index)
 
             # update reaction rates
-            self.network.update(self.states, self.inputs, self.cumul, rxn)
+            self.system.R.update_after_rxn_fired(self.states,
+                                                self.inputs,
+                                                self.cumul,
+                                                rxn)
 
             # if total rate is zero, keep stepping until input changes
-            if self.network.R.total_rate == 0:
+            if self.system.R.total_rate == 0:
 
                 # if there is no input, jump to end
                 if self.null_input == 1:
@@ -268,8 +319,13 @@ cdef class cSSA:
 
             # choose a reaction
             rfloat = rand()/(RAND_MAX*1.0)
-            tau = get_timestep(self.network.R.total_rate, rfloat)
-            rxn = choose_rxn(self.rxn_order, self.network.R.rates, self.network.M, self.network.R.total_rate, rfloat)
+            tau = get_timestep(self.system.R.total_rate,
+                               rfloat)
+            rxn = choose_rxn(self.rxn_order,
+                             self.system.R.rates,
+                             self.system.M,
+                             self.system.R.total_rate,
+                             rfloat)
 
             # fire reaction
             self.fire_reaction(rxn, 1, self.states)
@@ -285,7 +341,7 @@ cdef class cSSA:
 
         # interpolate any later values
         while threshold < duration:
-            for s_index in xrange(self.network.N):
+            for s_index in xrange(self.system.N):
                 self.rstates.data.as_uints[s_index*num_timepoints+t_index] = self.states.data.as_uints[s_index]
             threshold += dt
             t_index += 1
@@ -296,7 +352,7 @@ cdef class cSSA:
                                  double total_rate,
                                  double rfloat) nogil:
         """ Select reaction from given pre-sorted rates (faster). """
-        return choose_rxn(order, rxn_rates, self.network.M, total_rate, rfloat)
+        return choose_rxn(order, rxn_rates, self.system.M, total_rate, rfloat)
 
     cdef array get_input_value(self,
                                cSignal input_function,
@@ -307,15 +363,15 @@ cdef class cSSA:
                             unsigned int rxn,
                             unsigned int extent,
                             array states) nogil:
-        cdef unsigned int N = self.network.S.lengths.data.as_uints[rxn]
-        cdef unsigned int index = self.network.S.index.data.as_uints[rxn]
+        cdef unsigned int N = self.system.S.lengths.data.as_uints[rxn]
+        cdef unsigned int index = self.system.S.index.data.as_uints[rxn]
         cdef unsigned int count, species
         cdef int coefficient
 
         # update each state
         for count in xrange(N):
-            species = self.network.S.species.data.as_uints[index]
-            coefficient = self.network.S.coefficients.data.as_longs[index]
+            species = self.system.S.species.data.as_uints[index]
+            coefficient = self.system.S.coefficients.data.as_longs[index]
             states.data.as_uints[species] += (coefficient * extent)
             index += 1
 
@@ -323,6 +379,19 @@ cdef class cSSA:
                                 array states,
                                 array cumulative,
                                 double tau) nogil:
+        """
+
+        Update state integrator values.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            cumulative (array[double]) - integrator values
+
+            tau (double) - time step
+
+        """
         cdef unsigned int i
-        for i in xrange(self.network.N):
+        for i in xrange(self.system.N):
             cumulative.data.as_doubles[i] += (tau * states.data.as_uints[i])

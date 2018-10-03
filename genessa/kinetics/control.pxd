@@ -12,8 +12,8 @@ cdef class cPController(cSpeciesDependent):
     @staticmethod
     cdef cPController from_list(list rxns)
     cdef double get_species_activity(self, unsigned int rxn, array states) nogil
-    cdef double update(self, unsigned int rxn, array states) nogil
-    cdef double cget_rate(self, unsigned int rxn, array states) nogil
+    cdef double evaluate_rxn_rate(self, unsigned int rxn, array states) nogil
+    cdef double c_evaluate_rate(self, unsigned int rxn, array states) nogil
 
 
 cdef class cIController(cPController):

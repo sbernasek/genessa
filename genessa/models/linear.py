@@ -2,102 +2,8 @@ import numpy as np
 
 # intra-package python imports
 from ..kinetics.massaction import MassAction
-from .cells import Gene, Cell
-
-
-class LinearGene:
-    """
-    Class defines a single gene coding a protein product. All reaction rates are based on linear propensity functions.
-
-    System dimensions:
-        0: Gene
-        1: mRNA
-        2: Protein
-
-    Attributes:
-
-        nodes (np.ndarray) - node indices
-
-        genes (dict) - single (name: node_id) pair
-
-        transcripts (dict) - single {name: node_id} pair
-
-        proteins (dict) - single {name: node_id} pair
-
-        reactions (list) - translation, mRNA decay, and protein decay reactions
-
-    """
-    def __init__(self, name='gene', k1=1, k2=1, g0=1, g1=1, g2=1):
-        """
-        Create gene along with translation, mRNA decay, and protein decay reactions.
-
-        Args:
-
-            name (str) - gene name
-
-            k1 (float) - transcription rate constant
-
-            k2 (float) - translation rate constant
-
-            g0 (float) - gene decay rate constant
-
-            g1 (float) - transcript decay rate constant
-
-            g2 (float) - protein decay rate constant
-
-        """
-
-        self.nodes = np.arange(3)
-        self.genes = {name: 0}
-        self.transcripts = {name: 1}
-        self.proteins = {name: 2}
-
-        # define gene names
-        gene_name = name[0].lower()
-        protein_name = name.upper()
-
-        # define reactions
-        self.reactions = [
-
-            # gene decay
-            MassAction([-1, 0, 0],
-                       [1, 0, 0],
-                       k=g0,
-                       rxn_type=gene_name+' off rate',
-                       atp_sensitive=False,
-                       ribosome_sensitive=False),
-
-            # transcript synthesis
-            MassAction([0, 1, 0],
-                       [1, 0, 0],
-                       k=k1,
-                       rxn_type=gene_name+' transcription',,
-                       atp_sensitive=True,
-                       ribosome_sensitive=False),
-
-            # transcript decay
-            MassAction([0, -1, 0],
-                       [0, 1, 0],
-                       k=g1,
-                       rxn_type=gene_name+' decay',
-                       atp_sensitive=False,
-                       ribosome_sensitive=False),
-
-            # protein synthesis
-            MassAction([0, 0, 1],
-                       [0, 1, 0],
-                       k=k2,
-                       rxn_type=protein_name+' translation',
-                       atp_sensitive=True,
-                       ribosome_sensitive=True),
-
-            # protein decay
-            MassAction([0, 0, -1],
-                       [0, 0, 1],
-                       k=g2,
-                       rxn_type=protein_name+' decay',
-                       atp_sensitive=True,
-                       ribosome_sensitive=True)]
+from .cells import Cell
+from .genes import LinearGene
 
 
 class LinearModel(Cell):
@@ -110,22 +16,29 @@ class LinearModel(Cell):
 
     Inherited Attributes:
 
-        nodes (np.ndarray) - node indices
-
-        reactions (list) - translation, mRNA decay, and protein decay reactions
-
         transcripts (dict) - {name: node_id} pairs
 
         proteins (dict) - {name: node_id} pairs
 
         phosphorylated (dict) - {name: node_id} pairs
 
+        nodes (np.ndarray) - vector of node indices
+
+        node_key (dict) - {state dimension: node id} pairs
+
+        reactions (list) - list of reaction objects
+
+        stoichiometry (np.ndarray) - stoichiometric coefficients, (N,M)
+
+        N (int) - number of nodes
+
+        M (int) - number of reactions
+
+        I (int) - number of inputs
+
     """
 
-    def __init__(self,
-                 genes=(),
-                 num_inputs=1,
-                 **kwargs):
+    def __init__(self, genes=(), I=1, **kwargs):
         """
         Instantiate linear cell with one or more protein coding genes.
 
@@ -133,13 +46,13 @@ class LinearModel(Cell):
 
             genes (tuple) - names of genes
 
-            num_inputs (int) - number of input channels
+            I (int) - number of input channels
 
             kwargs: keyword arguments for add_genes
 
         """
         self.genes = {}
-        super().__init__(genes, num_inputs, **kwargs)
+        super().__init__(genes, I, **kwargs)
 
     def add_gene(self, **kwargs):
         """
@@ -192,7 +105,7 @@ class LinearModel(Cell):
 
         # define propensity
         propensity = np.zeros(self.nodes.size, dtype=np.int64)
-        input_dependence = np.zeros(self.input_size, dtype=np.int64)
+        input_dependence = np.zeros(self.I, dtype=np.int64)
         if 'IN' in activator:
           if '_' in activator:
             input_dependence[int(activator.split('_')[-1])] = 1

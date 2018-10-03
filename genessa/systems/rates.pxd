@@ -23,14 +23,43 @@ cdef class cRates:
     cdef cRxnMap rxn_map, input_map, ptb_map
 
     # methods
-    cdef double evaluate(self, unsigned int rxn, array states, array inputs, array cumul) nogil
-    cdef void set_rate(self, unsigned int rxn, array states, array inputs, array cumul) nogil
-    cdef void apply_perturbation(self, unsigned int rxn, double ptb) nogil
-    cdef void update_input(self, array states, array inputs, array cumul, unsigned int dim) nogil
-    cdef void update(self, array states, array inputs, array cumul, unsigned int fired) nogil
-    cdef void update_all(self, array states, array inputs, array cumul) nogil
-    cpdef void cupdate(self, array states, array inputs, array cumul) with gil
-    cpdef array evaluate_rxn_rates(self, array states, array inputs, array cumul)
+    cdef double evaluate_rxn_rate(self,
+                             unsigned int rxn,
+                             array states,
+                             array inputs,
+                             array cumulative) nogil
+
+    cdef void update_rxn_rate(self,
+                       unsigned int rxn,
+                       array states,
+                       array inputs,
+                       array cumulative) nogil
+
+    cdef void apply_perturbation(self,
+                                 unsigned int rxn,
+                                 double ptb) nogil
+
+    cdef void update_after_input_change(self,
+                                       array states,
+                                       array inputs,
+                                       array cumulative,
+                                       unsigned int dim) nogil
+
+    cdef void update_after_rxn_fired(self,
+                                     array states,
+                                     array inputs,
+                                     array cumulative,
+                                     unsigned int fired) nogil
+
+    cdef void update_all(self,
+                         array states,
+                         array inputs,
+                         array cumulative) nogil
+
+    cpdef array c_evaluate_rxn_rates(self,
+                                     array states,
+                                     array inputs,
+                                     array cumulative)
 
 
 # define mappable function names

@@ -259,7 +259,7 @@ ext_modules =[
     declare_extension("genessa.systems.rates", ext_type, dirs),
 
     # networks
-    declare_extension("genessa.systems.networks", ext_type, dirs),
+    declare_extension("genessa.systems.systems", ext_type, dirs),
 
     # ssa
     declare_extension("genessa.solver.ssa", ext_type, dirs)

@@ -241,11 +241,26 @@ cdef class cHill(cIDRepressor):
 
         return availability
 
-    cdef double update(self,
-                       unsigned int rxn,
-                       array states,
-                       array inputs) nogil:
-        """ Update rate of specified reaction. """
+    cdef double evaluate_rxn_rate(self,
+                                   unsigned int rxn,
+                                   array states,
+                                   array inputs) nogil:
+        """
+        Evaluates and returns rate for specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - index of reaction
+
+            states (array[unsigned int]) - state values
+
+            inputs (array[double]) - input values
+
+        Returns:
+
+            rate (double) - reaction rate
+
+        """
         cdef double activity = 0
         cdef double vmax, n, k_m
         cdef double availability
@@ -269,11 +284,26 @@ cdef class cHill(cIDRepressor):
         #self.rates.data.as_doubles[rxn] = rate
         return rate
 
-    cdef double cget_rate(self,
-                          unsigned int rxn,
-                          array states,
-                          array input_values) nogil:
-        """ Get rate of specified reaction """
+    cdef double c_evaluate_rate(self,
+                                unsigned int rxn,
+                                array states,
+                                array inputs) nogil:
+        """
+        Evaluates and returns rate of specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+            states (array[double]) - state values
+
+            inputs (array[double]) - input values
+
+        Returns:
+
+            rate (float) - reaction rate
+
+        """
 
         cdef unsigned int count, ind
         cdef double coefficient, value
@@ -301,7 +331,7 @@ cdef class cHill(cIDRepressor):
         index = self.inputs_ind.data.as_uints[rxn]
         for count in xrange(I):
             ind = self.inputs.data.as_uints[index]
-            value = input_values.data.as_doubles[ind]
+            value = inputs.data.as_doubles[ind]
             coefficient = self.input_dependence.data.as_doubles[index]
             activity += (value*coefficient)
             index += 1
@@ -312,7 +342,7 @@ cdef class cHill(cIDRepressor):
         # integrate repressor occupancies (multiplicative)
         index = self.repressors_ind.data.as_uints[rxn]
         for count in xrange(R):
-            occupancy = self.rep_obj.cget_occupancy(states, input_values, index)
+            occupancy = self.rep_obj.cget_occupancy(states, inputs, index)
             rate *= (1-occupancy)
             index += 1
 

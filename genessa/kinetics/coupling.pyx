@@ -94,7 +94,16 @@ cdef class cSDRepressor(cSpeciesDependent):
     cdef void update(self,
                      array states,
                      unsigned int fired) nogil:
-        """ Update occupancies for repressors that have changed. """
+        """
+        Update occupancies following a reaction firing.
+
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            fired (unsigned int) - index of fired reaction
+
+        """
         self.rxn_map.app_rep(self, fired, self.set_occupancy, states)
 
     cdef double cget_occupancy(self,
@@ -205,7 +214,20 @@ cdef class cCoupling(cSpeciesDependent):
     cdef double get_availability(self,
                                  unsigned int rxn,
                                  array states) nogil:
-        """ Integrate all repressor activity to determine availability. """
+        """
+        Integrate repressor occupancies to determine overall availability for a specified promoter.
+
+        Args:
+
+            rxn (unsigned int) - index of transcription reaction
+
+            states (array[unsigned int]) - state values
+
+        Returns:
+
+            availability (double) - total promoter availability
+
+        """
 
         cdef unsigned int count
         cdef double occupancy
@@ -221,10 +243,23 @@ cdef class cCoupling(cSpeciesDependent):
 
         return availability
 
-    cdef double update(self,
-                       unsigned int rxn,
-                       array states) nogil:
-        """ Update rate of specified reaction. """
+    cdef double evaluate_rxn_rate(self,
+                                   unsigned int rxn,
+                                   array states) nogil:
+        """
+        Evaluates and returns rate for specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - index of reaction
+
+            states (array[unsigned int]) - state values
+
+        Returns:
+
+            rate (double) - reaction rate
+
+        """
         cdef double coupling_strength
         cdef double rate
 
@@ -238,11 +273,19 @@ cdef class cCoupling(cSpeciesDependent):
 
         return rate
 
-    cdef void update_activity(self,
+    cdef void update_edge(self,
                               unsigned int edge,
                               array states) nogil:
+        """
+        Update edge weight.
 
-        """ Get occupancy by specified repressor. """
+        Args:
+
+            edge (unsigned int) - index of edge
+
+            states (array[unsigned int]) - state values
+
+        """
         cdef int weight
         cdef unsigned int state_ind, state
         cdef int old_edge = self.edges.data.as_ints[edge]
@@ -261,16 +304,38 @@ cdef class cCoupling(cSpeciesDependent):
         # update edge
         self.edges.data.as_uints[edge] = new_edge
 
-    cdef void update_activities(self,
+    cdef void update_edges(self,
                                 array states,
                                 unsigned int fired) nogil:
-        """ Update occupancies for repressors that have changed. """
-        self.rxn_map.app(self, fired, self.update_activity, states)
+        """
+        Update edge weights following a reaction event.
 
-    cdef double cget_rate(self,
-                          unsigned int rxn,
-                          array states) nogil:
-        """ Get rate of specified reaction """
+        Args:
+
+            states (array[unsigned int]) - state values
+
+            fired (unsigned int) - fired reaction
+
+        """
+        self.rxn_map.app(self, fired, self.update_edge, states)
+
+    cdef double c_evaluate_rate(self,
+                                unsigned int rxn,
+                                array states) nogil:
+        """
+        Evaluates and returns rate of specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+            states (array[double]) - state values
+
+        Returns:
+
+            rate (float) - reaction rate
+
+        """
 
         cdef unsigned int count, ind
         cdef double coefficient, value

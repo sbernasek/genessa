@@ -3,92 +3,17 @@ import networkx as nx
 from copy import copy
 
 # intra-package python imports
-from ..systems.networks import MutableNetwork, Graph
+from ..systems.networks import Network
 from ..kinetics.massaction import MassAction
 from ..kinetics.hill import Hill
+from .genes import Gene
 
 
-class Gene:
-    """
-    Class defines a single gene coding a protein product.
-
-    System dimensions:
-        0: mRNA
-        1: Protein
-
-    Attributes:
-
-        nodes (np.ndarray) - node indices
-
-        transcripts (dict) - single {name: node_id} pair
-
-        proteins (dict) - single {name: node_id} pair
-
-        reactions (list) - translation, mRNA decay, and protein decay reactions
-
-    """
-    def __init__(self, name='gene', k=1, g1=1, g2=1):
-        """
-        Create gene along with translation, mRNA decay, and protein decay reactions.
-
-        Args:
-
-            name (str) - gene name
-
-            k (float) - translation rate constant
-
-            g1 (float) - transcript decay rate constant
-
-            g2 (float) - protein decay rate constant
-
-        """
-
-        self.nodes = np.arange(2)
-        self.transcripts = {name: 0}
-        self.proteins = {name: 1}
-
-        # define gene names
-        gene_name = name[0].lower()
-        mrna_decay = gene_name + ' decay'
-        protein_name = name.upper()
-        translation = protein_name + ' translation'
-        protein_decay = protein_name + ' decay'
-
-        # define reactions
-        self.reactions = [
-
-            # transcript decay
-            MassAction([-1, 0],
-                       [1, 0],
-                       k=g1,
-                       rxn_type=mrna_decay,
-                       atp_sensitive=False,
-                       ribosome_sensitive=False),
-
-            # protein synthesis
-            MassAction([0, 1],
-                       [1, 0],
-                       k=k,
-                       rxn_type=translation,
-                       atp_sensitive=True,
-                       ribosome_sensitive=True),
-
-            # protein decay
-            MassAction([0, -1],
-                       [0, 1],
-                       k=g2,
-                       rxn_type=protein_decay,
-                       atp_sensitive=True,
-                       ribosome_sensitive=True)]
-
-
-class Cell(MutableNetwork):
+class Cell(Network):
     """
     Class defines a cell with one or more protein coding genes.
 
     Attributes:
-
-        genes (dict) - {name: node_id} pairs - unused by default
 
         transcripts (dict) - {name: node_id} pairs
 
@@ -98,15 +23,25 @@ class Cell(MutableNetwork):
 
     Inherited Attributes:
 
-        nodes (np.ndarray) - node indices
+        nodes (np.ndarray) - vector of node indices
 
-        reactions (list) - translation, mRNA decay, and protein decay reactions
+        node_key (dict) - {state dimension: node id} pairs
+
+        reactions (list) - list of reaction objects
+
+        stoichiometry (np.ndarray) - stoichiometric coefficients, (N,M)
+
+        N (int) - number of nodes
+
+        M (int) - number of reactions
+
+        I (int) - number of inputs
 
     """
 
     def __init__(self,
                  genes=(),
-                 num_inputs=1,
+                 I=1,
                  **kwargs):
         """
         Instantiate cell with one or more protein coding genes.
@@ -115,14 +50,14 @@ class Cell(MutableNetwork):
 
             genes (tuple) - names of genes
 
-            num_inputs (int) - number of input channels
+            I (int) - number of input channels
 
             kwargs: keyword arguments for add_genes
 
         """
 
         # instantiate network
-        MutableNetwork.__init__(self, 0, inputs=num_inputs)
+        super().__init__(0, I=I)
 
         # initialize species dictionaries
         self.transcripts = {}
@@ -131,12 +66,6 @@ class Cell(MutableNetwork):
 
         # add genes
         self.add_genes(genes, **kwargs)
-
-    def __repr__(self):
-        """ Print list of reactions. """
-        graph = Graph(self)
-        graph.show_reactions()
-        return ''
 
     def get_ic(self, ic=None):
         """
@@ -420,7 +349,7 @@ class Cell(MutableNetwork):
             propensity[self.transcripts[actuator]] = 1
         else:
             if '_' in actuator:
-                input_dependence = np.zeros(self.input_size, dtype=float)
+                input_dependence = np.zeros(self.I, dtype=float)
                 input_dependence[int(actuator.split('_')[-1])] = 1
             else:
                 input_dependence = 1
@@ -472,7 +401,7 @@ class Cell(MutableNetwork):
             propensity[self.proteins[actuator]] = 1
         else:
             if '_' in actuator:
-                input_dependence = np.zeros(self.input_size, dtype=float)
+                input_dependence = np.zeros(self.I, dtype=float)
                 input_dependence[int(actuator.split('_')[-1])] = 1
             else:
                 input_dependence = 1
@@ -480,7 +409,7 @@ class Cell(MutableNetwork):
         # add input rate modifier
         rate_modifier = None
         if modulation is not None:
-            rate_modifier = np.zeros(self.input_size, dtype=float)
+            rate_modifier = np.zeros(self.I, dtype=float)
             rate_modifier[modulation[0]] = modulation[1]
 
         # define reaction
@@ -493,29 +422,5 @@ class Cell(MutableNetwork):
                    rate_modifier=rate_modifier)
 
         # add reaction
-        self.reactions.append(rxn)
-        self.update()
-
-    def add_transcription(self,
-                          gene,
-                          modules=None,
-                          k=1,
-                          alpha=None,
-                          perturbed=False,
-                          **kw):
-
-        # define stoichiometry
-        s = np.zeros(self.nodes.size, dtype=np.int64)
-        s[self.transcripts[gene]] = 1
-
-        # add synthesis reaction
-        name = gene + ' transcription'
-        rxn = Transcription(s,
-                            modules,
-                            k=k,
-                            alpha=alpha,
-                            perturbed=perturbed,
-                            rxn_type=name,
-                            **kw)
         self.reactions.append(rxn)
         self.update()

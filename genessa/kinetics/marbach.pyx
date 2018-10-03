@@ -383,20 +383,51 @@ cdef class cTranscription:
 
         return modifier
 
-    cdef double update(self,
+    cdef double evaluate_rxn_rate(self,
                        unsigned int rxn,
                        array states,
-                       array input_values) nogil:
-        """ Update rate of specified reaction. """
+                       array inputs) nogil:
+        """
+        Evaluates and returns rate for specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - index of reaction
+
+            states (array[unsigned int]) - state values
+
+            inputs (array[double]) - input values
+
+        Returns:
+
+            rate (double) - reaction rate
+
+        """
         cdef double k = self.k.data.as_doubles[rxn]
         cdef double activation = self.get_activation(rxn, states)
         return k * activation
 
-    cdef double cget_rate(self,
-                          unsigned int rxn,
-                          array states,
-                          array input_values) nogil:
-        """ Get rate of specified reaction """
+    cdef double c_evaluate_rate(self,
+                                unsigned int rxn,
+                                array states,
+                                array inputs) nogil:
+        """
+        Evaluates and returns rate of specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+            states (array[double]) - state values
+
+            inputs (array[double]) - input values
+
+        Returns:
+
+            rate (float) - reaction rate
+
+        """
+
         cdef double k = self.k.data.as_doubles[rxn]
         cdef double activation = self.get_activation(rxn, states)
 

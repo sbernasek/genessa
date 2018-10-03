@@ -9,9 +9,7 @@ class HillModel(Cell):
     """
     Class defines a cell with one or more protein coding genes.
 
-    Attributes:
-
-        genes (dict) - {name: node_id} pairs - unused by default
+    Inherited Attributes:
 
         transcripts (dict) - {name: node_id} pairs
 
@@ -19,11 +17,19 @@ class HillModel(Cell):
 
         phosphorylated (dict) - {name: node_id} pairs
 
-    Inherited Attributes:
+        nodes (np.ndarray) - vector of node indices
 
-        nodes (np.ndarray) - node indices
+        node_key (dict) - {state dimension: node id} pairs
 
-        reactions (list) - translation, mRNA decay, and protein decay reactions
+        reactions (list) - list of reaction objects
+
+        stoichiometry (np.ndarray) - stoichiometric coefficients, (N,M)
+
+        N (int) - number of nodes
+
+        M (int) - number of reactions
+
+        I (int) - number of inputs
 
     """
 
@@ -66,12 +72,19 @@ class HillModel(Cell):
 
         # define propensity
         propensity = np.zeros(self.nodes.size, dtype=np.int64)
-        input_dependence = np.zeros(self.input_size, dtype=np.int64)
+        input_dependence = np.zeros(self.I, dtype=np.int64)
+
+        if type(promoters) == str:
+            promoters = (promoters,)
+
         for promoter in promoters:
             if 'IN' not in promoter:
                 propensity[self.proteins[promoter]] = 1
             else:
-                input_dependence[int(promoter.split('_')[-1])] = 1
+                if '_' in promoter:
+                    input_dependence[int(promoter.split('_')[-1])] = 1
+                else:
+                    input_dependence[0] = 1
 
         # define reaction
         rxn = Hill(stoichiometry=stoichiometry,
@@ -113,12 +126,20 @@ class HillModel(Cell):
 
         # define propensity
         propensity = np.zeros(self.nodes.size, dtype=np.int64)
-        input_dependence = np.zeros(self.input_size, dtype=np.int64)
+        input_dependence = np.zeros(self.I, dtype=np.int64)
+
+
+        if type(actuators) == str:
+            actuators = (actuators,)
+
         for actuator in actuators:
             if 'IN' not in actuator:
                 propensity[self.proteins[actuator]] = 1
             else:
-                input_dependence[int(actuator.split('_')[-1])] = 1
+                if '_' in actuator:
+                    input_dependence[int(actuator.split('_')[-1])] = 1
+                else:
+                    input_dependence[0] = 1
 
         # define repressor
         repressor = Repressor(propensity=propensity,

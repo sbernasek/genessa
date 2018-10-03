@@ -1,3 +1,6 @@
+import numpy as np
+
+
 def name_parameter(parameter, default_name='k'):
     """ Get parameter name. """
 

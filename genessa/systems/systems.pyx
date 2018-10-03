@@ -6,7 +6,7 @@ from cpython.array cimport array
 import numpy as np
 
 # import intra-package cython dependencies
-from .networks cimport cStoichiometry, cNetwork
+from .systems cimport cStoichiometry, cSystem
 from .rates cimport cRates
 
 # import intra-package python dependencies
@@ -40,17 +40,16 @@ cdef class cStoichiometry:
         self.coefficients = array('l', coefficients)
 
     @staticmethod
-    def from_array(np.ndarray s):
+    def from_array(np.ndarray stoichiometry):
         """ Instantiate from N x M stoichiometry array. """
-        rxns, species = s.T.nonzero()
+        rxns, species = stoichiometry.T.nonzero()
         lengths = np.bincount(rxns).astype(np.uint32)
         index = np.hstack((np.zeros(1), np.cumsum(lengths))).astype(np.uint32)
-        coefficients = s.T[(rxns, species)].astype(np.int64)
+        coefficients = stoichiometry.T[(rxns, species)].astype(np.int64)
         return cStoichiometry(index, lengths, species.astype(np.uint32), coefficients)
 
 
-
-cdef class cNetwork:
+cdef class cSystem:
     """
     Class defines a network of interacting nodes.
 
@@ -74,6 +73,7 @@ cdef class cNetwork:
                  unsigned int I,
                  cStoichiometry S,
                  cRates R):
+
         self.N = N
         self.M = M
         self.I = I
@@ -83,7 +83,7 @@ cdef class cNetwork:
     @staticmethod
     def from_network(network):
         """
-        Instantiate from python network.
+        Instantiate from python Network.
 
         Args:
 
@@ -91,7 +91,7 @@ cdef class cNetwork:
 
         Returns:
 
-            c_network (cNetwork)
+            c_system (cSystem)
 
         """
 
@@ -109,51 +109,52 @@ cdef class cNetwork:
         S = cStoichiometry.from_array(network.stoichiometry)
         R = Rates.compile_c_rate_function(network)
 
-        return cNetwork(N, M, I, S, R)
+        return cSystem(N, M, I, S, R)
 
     cdef array get_rxn_rates(self):
+        """ Returns current reaction rates. """
         return self.R.rates
 
-    cdef double get_total_rate(self) nogil:
+    cdef double get_total_rxn_rate(self) nogil:
+        """ Returns current total reaction rate. """
         return self.R.total_rate
 
-    cdef void update_all(self,
-                         array states,
-                         array inputs,
-                         array cumulative) nogil:
-        self.R.update_all(states, inputs, cumulative)
+    cdef array c_evaluate_species_rates(self,
+                                       array states,
+                                       array inputs,
+                                       array cumulative):
+        """
+        Evaluate rate of change for all species.
 
-    cdef void update_input(self,
-                           array states,
-                           array inputs,
-                           array cumulative,
-                           unsigned int dim) nogil:
-        self.R.update_input(states, inputs, cumulative, dim)
+        Args:
 
-    cdef void update(self,
-                     array states,
-                     array inputs,
-                     array cumulative,
-                     unsigned int rxn_fired) nogil:
-        self.R.update(states, inputs, cumulative, rxn_fired)
+            states (array[double]) - state values
 
-    cdef void cset_species_rates(self,
-                                 array states,
-                                 array inputs,
-                                 array cumul,
-                                 array rates):
+            inputs (array[double]) - input values
+
+            cumulative (array[double]) - integrator values
+
+        Returns:
+
+            rates (array[double]) - species rates, e.g. dX/dt
+
+        """
 
         cdef unsigned int rxn
         cdef double rxn_rate
         cdef unsigned int N, index, count, species
         cdef int coefficient
+        cdef array rxn_rates
 
-        # get reaction rates
-        self.R.cupdate(states, inputs, cumul)
+        # instantiate array of zeros
+        cdef array rates = array('d', self.N*[0.])
+
+        # evaluate reaction rates
+        rxn_rates = self.R.c_evaluate_rxn_rates(states, inputs, cumulative)
 
         # for each reaction
         for rxn in xrange(self.M):
-            rxn_rate = self.R.rates.data.as_doubles[rxn]
+            rxn_rate = rxn_rates.data.as_doubles[rxn]
             N = self.S.lengths.data.as_uints[rxn]
             index = self.S.index.data.as_uints[rxn]
 
@@ -163,3 +164,5 @@ cdef class cNetwork:
                 coefficient = self.S.coefficients.data.as_longs[index]
                 rates.data.as_doubles[species] += (coefficient * rxn_rate)
                 index += 1
+
+        return rates

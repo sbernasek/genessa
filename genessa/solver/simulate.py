@@ -114,11 +114,13 @@ class Simulation:
             input_value = lambda t: input_function(t)
 
         # cumulative is not supported
-        cumul = array('d', np.zeros(self.N, dtype=np.float64))
+        cumulative = array('d', np.zeros(self.N, dtype=np.float64))
 
         # define rate function
         def derivative(x, t):
-            dxdt = self.cSSA.get_sp_rates(array('d', x), input_value(t), cumul)
+            states = array('d', x)
+            inputs = input_value(t)
+            dxdt = self.cSSA.evaluate_species_rates(states, inputs, cumulative)
             return dxdt
 
         # run solver and compile timeseries
@@ -171,11 +173,13 @@ class Simulation:
             input_value = lambda t: input_function(t)
 
         # cumulative is not supported
-        cumul = array('d', np.zeros(self.N, dtype=np.float64))
+        cumulative = array('d', np.zeros(self.N, dtype=np.float64))
 
         # define rate function
         def derivative(t, x):
-            dxdt = self.cSSA.get_sp_rates(array('d', x), input_value(t), cumul)
+            states = array('d', x)
+            inputs = input_value(t)
+            dxdt = self.cSSA.evaluate_species_rates(states, inputs, cumulative)
             return dxdt
 
         # run solver and compile timeseries

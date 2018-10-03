@@ -9,9 +9,7 @@ class MarbachModel(Cell):
     """
     Class defines a cell with one or more protein coding genes. Transcriptional kinetics are dictated by the Marbach model.
 
-    Attributes:
-
-        genes (dict) - {name: node_id} pairs - unused by default
+    Inherited Attributes:
 
         transcripts (dict) - {name: node_id} pairs
 
@@ -19,11 +17,19 @@ class MarbachModel(Cell):
 
         phosphorylated (dict) - {name: node_id} pairs
 
-    Inherited Attributes:
+        nodes (np.ndarray) - vector of node indices
 
-        nodes (np.ndarray) - node indices
+        node_key (dict) - {state dimension: node id} pairs
 
-        reactions (list) - translation, mRNA decay, and protein decay reactions
+        reactions (list) - list of reaction objects
+
+        stoichiometry (np.ndarray) - stoichiometric coefficients, (N,M)
+
+        N (int) - number of nodes
+
+        M (int) - number of reactions
+
+        I (int) - number of inputs
 
     """
 

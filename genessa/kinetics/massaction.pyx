@@ -55,8 +55,26 @@ cdef class cMassAction(cInputDependent):
         input_dependence = input_dependence.astype(np.float64)
         return cMassAction(M, k, species_ind, species, species_dependence, inputs_ind, inputs, input_dependence)
 
-    cdef double update(self, unsigned int rxn, array states, array inputs) nogil:
-        """ Update rate of specified reaction. """
+    cdef double evaluate_rxn_rate(self,
+                                   unsigned int rxn,
+                                   array states,
+                                   array inputs) nogil:
+        """
+        Evaluates and returns rate for specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - index of reaction
+
+            states (array[unsigned int]) - state values
+
+            inputs (array[double]) - input values
+
+        Returns:
+
+            rate (double) - reaction rate
+
+        """
         cdef double species_activity, input_activity
         cdef double rate = self.k.data.as_doubles[rxn]
 
@@ -65,14 +83,28 @@ cdef class cMassAction(cInputDependent):
         if self.n_active_inputs.data.as_uints[rxn] > 0:
             rate *= self.get_input_activity(rxn, inputs)
 
-        #self.rates.data.as_doubles[rxn] = rate
         return rate
 
-    cdef double cget_rate(self,
-                          unsigned int rxn,
-                          array states,
-                          array input_values) nogil:
-        """ Get rate of specified reaction """
+    cdef double c_evaluate_rate(self,
+                                unsigned int rxn,
+                                array states,
+                                array inputs) nogil:
+        """
+        Evaluates and returns rate of specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+            states (array[double]) - state values
+
+            inputs (array[double]) - input values
+
+        Returns:
+
+            rate (float) - reaction rate
+
+        """
 
         cdef unsigned int count, ind
         cdef double n, value
@@ -95,7 +127,7 @@ cdef class cMassAction(cInputDependent):
         index = self.inputs_ind.data.as_uints[rxn]
         for count in xrange(I):
             ind = self.inputs.data.as_uints[index]
-            value = input_values.data.as_doubles[ind]
+            value = inputs.data.as_doubles[ind]
             n = self.input_dependence.data.as_doubles[index]
             activity *= (value**n)
             index += 1
