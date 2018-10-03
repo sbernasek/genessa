@@ -34,14 +34,15 @@ cdef class cSpeciesDependent:
 
     cdef double get_species_activity(self,
                                      unsigned int rxn,
-                                     array states) nogil:
+                                     unsigned int *states) nogil:
         return self.get_species_activity_product(rxn, states)
 
     cdef double get_species_activity_product(self,
                                              unsigned int rxn,
-                                             array states) nogil:
+                                             unsigned int *states) nogil:
         """ Integrate species activity for specified reaction. """
-        cdef unsigned int count, n, state
+        cdef unsigned int n
+        cdef unsigned int count, state
         cdef double k
         cdef unsigned int index = self.species_ind.data.as_uints[rxn]
         cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
@@ -50,7 +51,7 @@ cdef class cSpeciesDependent:
         # integrate species activity
         for count in xrange(N):
             state = self.species.data.as_uints[index]
-            n = states.data.as_uints[state]
+            n = states[state]
             k = self.species_dependence.data.as_doubles[index]
             if k == 1:
                 activity *= n
@@ -64,9 +65,10 @@ cdef class cSpeciesDependent:
 
     cdef double get_species_activity_sum(self,
                                          unsigned int rxn,
-                                         array states) nogil:
+                                         unsigned int *states) nogil:
         """ Integrate species activity for specified reaction. """
-        cdef unsigned int count, n, state
+        cdef unsigned int n
+        cdef unsigned int count, state
         cdef double k
         cdef unsigned int index = self.species_ind.data.as_uints[rxn]
         cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
@@ -75,7 +77,7 @@ cdef class cSpeciesDependent:
         # integrate species activity
         for count in xrange(N):
             state = self.species.data.as_uints[index]
-            n = states.data.as_uints[state]
+            n = states[state]
             k = self.species_dependence.data.as_doubles[index]
             activity += (n * k)
             index += 1
@@ -106,12 +108,12 @@ cdef class cInputDependent(cSpeciesDependent):
 
     cdef double get_input_activity(self,
                                    unsigned int rxn,
-                                   array inputs) nogil:
+                                   double *inputs) nogil:
         return self.get_input_activity_product(rxn, inputs)
 
     cdef double get_input_activity_product(self,
                                            unsigned int rxn,
-                                           array input_values) nogil:
+                                           double *inputs) nogil:
         """ Integrate input activity for specified reaction. """
         cdef unsigned int count, dim
         cdef double n, k
@@ -122,7 +124,7 @@ cdef class cInputDependent(cSpeciesDependent):
         # integrate input activity
         for count in xrange(I):
             dim = self.inputs.data.as_uints[index]
-            n = input_values.data.as_doubles[dim]
+            n = inputs[dim]
             k = self.input_dependence.data.as_doubles[index]
             activity *= (n**k)
             index += 1
@@ -131,7 +133,7 @@ cdef class cInputDependent(cSpeciesDependent):
 
     cdef double get_input_activity_sum(self,
                                        unsigned int rxn,
-                                       array input_values) nogil:
+                                       double *inputs) nogil:
         """ Integrate input activity for specified reaction. """
         cdef unsigned int count, dim
         cdef double n, k
@@ -142,7 +144,7 @@ cdef class cInputDependent(cSpeciesDependent):
         # integrate input activity
         for count in xrange(I):
             dim = self.inputs.data.as_uints[index]
-            n = input_values.data.as_doubles[dim]
+            n = inputs[dim]
             k = self.input_dependence.data.as_doubles[index]
             activity += (n*k)
             index += 1

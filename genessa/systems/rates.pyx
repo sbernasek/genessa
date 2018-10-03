@@ -10,6 +10,7 @@ TO DO: DDOOOOOOO
 cimport cython
 cimport numpy as np
 from cpython.array cimport array
+from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 # python external imports
 import numpy as np
@@ -24,17 +25,60 @@ from ..kinetics.hill cimport cHill
 from ..kinetics.marbach cimport cTranscription
 from ..kinetics.coupling cimport cCoupling
 from .rates cimport cRates, cRxnMap
-from .cython_sum cimport sum_double_arr
+
 
 # ============================= CYTHON CODE ===================================
 
 
 cdef class cRates:
     """
+
     Class for managing all reaction rates.
+
+    Attributes:
+
+        M (unsigned int) - number of reaction types
+
+        total_rate (double) - total reaction rate
+
+    Attributes requiring memory:
+
+        rxn_types (unsigned int*) - reaction type labels
+
+        rxn_keys (unsigned int*) - indices for each reaction object
+
+        rates (double*) - rate of each reaction
+
+    Reaction Object Attributes:
+
+        coupling (cCoupling) - coupling reaction object
+
+        massaction (cMassAction) - mass action reaction object
+
+        transcription (cTranscription) - transcription reaction object
+
+        hill (cHill) - hill reaction object
+
+        icontrol (cIController) - integral controller reaction object
+
+        pcontrol (cPController) - proportional controller reaction object
+
+        massaction (cMassAction) - mass action reaction object
+
+        rxn_map (cRxnMap) - maps reaction firings to dependent reactions
+
+        input_map (cRxnMap) - maps changes in input to dependent reactions
+
+        ptb_map (cRxnMap) - maps perturbations to dependent reactions
+
+
+    Notes:
+
+        - all memory is allocated upon instantiation
+
     """
 
-    def __init__(self,
+    def __cinit__(self,
                  cCoupling coupling,
                  cMassAction massaction,
                  cTranscription transcription,
@@ -47,6 +91,8 @@ cdef class cRates:
                  dict input_map,
                  dict ptb_map):
 
+        cdef unsigned int i
+
         # store rate objects
         self.coupling = coupling
         self.massaction = massaction
@@ -57,21 +103,56 @@ cdef class cRates:
 
         # store reaction types and dependencies
         self.M = len(rxn_types)
-        self.rxn_types = array('I', rxn_types)
-        self.rxn_keys = array('I', rxn_keys)
         self.rxn_map = cRxnMap(rxn_map)
         self.input_map = cRxnMap(input_map)
         self.ptb_map = cRxnMap(ptb_map)
 
-        # initialize rates array
-        self.rates = array('d', np.zeros(self.M, dtype=np.float64))
-        self.total_rate = sum_double_arr(self.rates, self.M)
+        # initialize total reaction rate
+        self.total_rate = 0
+
+        # allocate and populate memory for arrays
+        self.allocate_memory()
+        for i in xrange(self.M):
+            self.rxn_types[i] = rxn_types[i]
+            self.rxn_keys[i] = rxn_keys[i]
+            self.rates[i] = 0.
+
+    def __dealloc__(self):
+        """ Deallocate memory from all array attributes. """
+        PyMem_Free(self.rxn_types)
+        PyMem_Free(self.rxn_keys)
+        PyMem_Free(self.rates)
+
+    cdef void allocate_memory(self):
+        """
+        Allocate memory for all array attributes.
+
+        Note:
+
+            - memory allocation requires GIL
+
+        """
+
+        # allocate memory for reaction types vector
+        self.rxn_types = <unsigned int*> PyMem_Malloc(self.M * sizeof(unsigned int))
+        if not self.rxn_types:
+            raise MemoryError('Reaction types memory block not allocated.')
+
+        # allocate memory for reaction keys vector
+        self.rxn_keys = <unsigned int*> PyMem_Malloc(self.M * sizeof(unsigned int))
+        if not self.rxn_keys:
+            raise MemoryError('Reaction keys memory block not allocated.')
+
+        # allocate memory for reaction rates vector
+        self.rates = <double*> PyMem_Malloc(self.M * sizeof(double))
+        if not self.rates:
+            raise MemoryError('Reaction rates memory block not allocated.')
 
     cdef double evaluate_rxn_rate(self,
                                  unsigned int rxn,
-                                 array states,
-                                 array inputs,
-                                 array cumulative) nogil:
+                                 unsigned int *states,
+                                 double *inputs,
+                                 double *cumulative) nogil:
         """
         Evaluates and returns rate for specified reaction.
 
@@ -79,11 +160,11 @@ cdef class cRates:
 
             rxn (unsigned int) - index of reaction
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
-            inputs (array[double]) - input values
+            inputs (double*) - input values
 
-            cumulative (array[double]) - integrator values
+            cumulative (double*) - integrator values
 
         Returns:
 
@@ -92,8 +173,8 @@ cdef class cRates:
         """
 
         cdef double rate = 0
-        cdef unsigned int key = self.rxn_keys.data.as_uints[rxn]
-        cdef unsigned int rxn_type = self.rxn_types.data.as_uints[rxn]
+        cdef unsigned int key = self.rxn_keys[rxn]
+        cdef unsigned int rxn_type = self.rxn_types[rxn]
 
         # get reaction rate
         if rxn_type == 0:
@@ -103,7 +184,7 @@ cdef class cRates:
             rate = self.massaction.evaluate_rxn_rate(key, states, inputs)
 
         elif rxn_type == 2:
-            rate = self.transcription.evaluate_rxn_rate(key, states, inputs)
+            rate = self.transcription.evaluate_rxn_rate(key)
 
         elif rxn_type == 3:
             rate = self.hill.evaluate_rxn_rate(key, states, inputs)
@@ -117,10 +198,10 @@ cdef class cRates:
         return rate
 
     cdef void update_rxn_rate(self,
-                       unsigned int rxn,
-                       array states,
-                       array inputs,
-                       array cumulative) nogil:
+                               unsigned int rxn,
+                               unsigned int *states,
+                               double *inputs,
+                               double *cumulative) nogil:
         """
         Update rate for individual reaction.
 
@@ -128,21 +209,21 @@ cdef class cRates:
 
             rxn (unsigned int) - index of reaction
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
-            inputs (array[double]) - input values
+            inputs (double*) - input values
 
-            cumulative (array[double]) - integrator values
+            cumulative (double*) - integrator values
 
         """
         cdef double old_rate, rate
 
         # update rxn rate
         rate = self.evaluate_rxn_rate(rxn, states, inputs, cumulative)
-        old_rate = self.rates.data.as_doubles[rxn]
+        old_rate = self.rates[rxn]
 
         # update total rate
-        self.rates.data.as_doubles[rxn] = rate
+        self.rates[rxn] = rate
         self.total_rate += (rate - old_rate)
 
     cdef void apply_perturbation(self,
@@ -159,8 +240,8 @@ cdef class cRates:
 
         """
 
-        cdef unsigned int rxn_type = self.rxn_types.data.as_uints[rxn]
-        cdef unsigned int rxn_key = self.rxn_keys.data.as_uints[rxn]
+        cdef unsigned int rxn_type = self.rxn_types[rxn]
+        cdef unsigned int rxn_key = self.rxn_keys[rxn]
 
         # perturbations have only been implemented for other reaction types
         if rxn_type == 2:
@@ -170,9 +251,9 @@ cdef class cRates:
             pass
 
     cdef void update_after_input_change(self,
-                                       array states,
-                                       array inputs,
-                                       array cumulative,
+                                       unsigned int *states,
+                                       double *inputs,
+                                       double *cumulative,
                                        unsigned int dim) nogil:
         """
 
@@ -180,18 +261,18 @@ cdef class cRates:
 
         Args:
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
-            inputs (array[double]) - input values
+            inputs (double*) - input values
 
-            cumulative (array[double]) - integrator values
+            cumulative (double*) - integrator values
 
             dim (unsigned int) - input channel that changed
 
         """
 
         #  TEMPORARY *** apply first dimension of input as perturbation
-        cdef double ptb = inputs.data.as_doubles[0]
+        cdef double ptb = inputs[0]
         self.ptb_map.app_ptb(self,
                              dim,
                              self.apply_perturbation,
@@ -206,9 +287,9 @@ cdef class cRates:
                            cumulative)
 
     cdef void update_after_rxn_fired(self,
-                                     array states,
-                                     array inputs,
-                                     array cumulative,
+                                     unsigned int *states,
+                                     double *inputs,
+                                     double *cumulative,
                                      unsigned int fired) nogil:
         """
 
@@ -216,11 +297,11 @@ cdef class cRates:
 
         Args:
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
-            inputs (array[double]) - input values
+            inputs (double*) - input values
 
-            cumulative (array[double]) - integrator values
+            cumulative (double*) - integrator values
 
             fired (unsigned int) - index of reaction that fired
 
@@ -236,27 +317,27 @@ cdef class cRates:
                          cumulative)
 
     cdef void update_all(self,
-                         array states,
-                         array inputs,
-                         array cumulative) nogil:
+                         unsigned int *states,
+                         double *inputs,
+                         double *cumulative) nogil:
         """
 
         Update all reaction rates.
 
         Args:
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
-            inputs (array[double]) - input values
+            inputs (double*) - input values
 
-            cumulative (array[double]) - integrator values
+            cumulative (double*) - integrator values
 
         """
         cdef unsigned int rxn
         cdef unsigned int input_dim
 
         # apply time-zero perturbations
-        cdef double ptb = inputs.data.as_doubles[0]
+        cdef double ptb = inputs[0]
         self.ptb_map.app_ptb(self, 0, self.apply_perturbation, ptb)
 
         # update all reaction rates
@@ -298,8 +379,8 @@ cdef class cRates:
         for rxn in xrange(self.M):
 
             # determine reaction type
-            rxn_type = self.rxn_types.data.as_uints[rxn]
-            key = self.rxn_keys.data.as_uints[rxn]
+            rxn_type = self.rxn_types[rxn]
+            key = self.rxn_keys[rxn]
 
             # evaluate reaction rate
             if rxn_type == 0:
@@ -307,7 +388,7 @@ cdef class cRates:
             elif rxn_type == 1:
                 rate = self.massaction.c_evaluate_rate(key, states, inputs)
             elif rxn_type == 2:
-                rate = self.transcription.c_evaluate_rate(key, states, inputs)
+                rate = self.transcription.c_evaluate_rate(key, states)
             elif rxn_type == 3:
                 rate = self.hill.c_evaluate_rate(key, states, inputs)
             elif rxn_type == 4:
@@ -345,16 +426,16 @@ cdef class cRxnMap:
                   cRates rf,
                   unsigned int key,
                   cSetRate f,
-                  array states,
-                  array inputs,
-                  array cumul) nogil:
+                  unsigned int *states,
+                  double *inputs,
+                  double *cumulative) nogil:
         cdef unsigned int count, rxn
         cdef unsigned int length = self.lengths.data.as_uints[key]
         cdef unsigned int index = self.ind.data.as_uints[key]
 
         for count in xrange(length):
             rxn = self.values.data.as_uints[index]
-            f(rf, rxn, states, inputs, cumul)
+            f(rf, rxn, states, inputs, cumulative)
             index += 1
 
     cdef void app_ptb(self,

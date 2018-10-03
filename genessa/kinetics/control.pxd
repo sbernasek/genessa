@@ -9,18 +9,36 @@ cdef class cPController(cSpeciesDependent):
     # methods
     @staticmethod
     cdef cPController get_blank_cPController()
+
     @staticmethod
     cdef cPController from_list(list rxns)
-    cdef double get_species_activity(self, unsigned int rxn, array states) nogil
-    cdef double evaluate_rxn_rate(self, unsigned int rxn, array states) nogil
-    cdef double c_evaluate_rate(self, unsigned int rxn, array states) nogil
+
+    cdef double evaluate_rxn_rate(self,
+        unsigned int rxn,
+        unsigned int *controlled) nogil
+
+    cdef double c_evaluate_rate(self,
+        unsigned int rxn,
+        array controlled) nogil
 
 
-cdef class cIController(cPController):
+cdef class cIController(cSpeciesDependent):
 
     # methods
     @staticmethod
     cdef cIController get_blank_cIController()
+
     @staticmethod
     cdef cIController from_list(list rxns)
-    cdef double get_species_activity_sum(self, unsigned int rxn, array cumul) nogil
+
+    cdef double evaluate_integrator_sum(self,
+        unsigned int rxn,
+        double *controlled) nogil
+
+    cdef double evaluate_rxn_rate(self,
+        unsigned int rxn,
+        double *controlled) nogil
+
+    cdef double c_evaluate_rate(self,
+        unsigned int rxn,
+        array controlled) nogil

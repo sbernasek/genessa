@@ -43,14 +43,9 @@ cdef class cPController(cSpeciesDependent):
         species_dependence = np.hstack([rxn._propensity for rxn in rxns])
         return cPController(M, k, species_ind, species, species_dependence)
 
-    cdef double get_species_activity(self,
-                                     unsigned int rxn,
-                                     array states) nogil:
-        return self.get_species_activity_sum(rxn, states)
-
     cdef double evaluate_rxn_rate(self,
                                    unsigned int rxn,
-                                   array states) nogil:
+                                   unsigned int *controlled) nogil:
         """
         Evaluates and returns rate for specified reaction.
 
@@ -58,7 +53,7 @@ cdef class cPController(cSpeciesDependent):
 
             rxn (unsigned int) - index of reaction
 
-            states (array[unsigned int]) - state values
+            controlled (unsigned int*) - controlled variable values
 
         Returns:
 
@@ -66,13 +61,13 @@ cdef class cPController(cSpeciesDependent):
 
         """
 
-        cdef double species_activity, rate
+        cdef double activity, rate
 
         # compute species activities
-        species_activity = self.get_species_activity(rxn, states)
+        activity = self.get_species_activity_sum(rxn, controlled)
 
         # set rate
-        rate = self.k.data.as_doubles[rxn] * species_activity
+        rate = self.k.data.as_doubles[rxn] * activity
         if rate < 0:
             rate = 0.
 
@@ -80,7 +75,7 @@ cdef class cPController(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                array states) nogil:
+                                array controlled) nogil:
         """
         Evaluates and returns rate of specified reaction.
 
@@ -88,7 +83,7 @@ cdef class cPController(cSpeciesDependent):
 
             rxn (unsigned int) - reaction index
 
-            states (array[double]) - state values
+            controlled (array[double]) - controlled variable values
 
         Returns:
 
@@ -107,7 +102,7 @@ cdef class cPController(cSpeciesDependent):
         index = self.species_ind.data.as_uints[rxn]
         for count in xrange(N):
             ind = self.species.data.as_uints[index]
-            value = states.data.as_doubles[ind]
+            value = controlled.data.as_doubles[ind]
             n = self.species_dependence.data.as_doubles[index]
             activity += (value*n)
             index += 1
@@ -115,10 +110,11 @@ cdef class cPController(cSpeciesDependent):
         return k*activity
 
 
-cdef class cIController(cPController):
+cdef class cIController(cSpeciesDependent):
 
     @staticmethod
     cdef cIController get_blank_cIController():
+        """ Returns blank cIController instance. """
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
         return cIController(0, xf, xl, xl, xf)
@@ -144,12 +140,26 @@ cdef class cIController(cPController):
         species_dependence = np.hstack([rxn._propensity for rxn in rxns])
         return cIController(M, k, species_ind, species, species_dependence)
 
-    cdef double get_species_activity_sum(self,
-                                         unsigned int rxn,
-                                         array cumul) nogil:
-        """ Integrate cumulative activity for specified reaction. """
+    cdef double evaluate_integrator_sum(self,
+                                     unsigned int rxn,
+                                     double *controlled) nogil:
+        """
+        Evaluates and returns weighted sum of controlled variables.
+
+        Args:
+
+            rxn (unsigned int) - index of reaction
+
+            controlled (double*) - controlled variable values
+
+        Returns:
+
+            activity (double) - weighted activity
+
+        """
+        cdef double n
         cdef unsigned int count, state
-        cdef double n, k
+        cdef double k
         cdef unsigned int index = self.species_ind.data.as_uints[rxn]
         cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
         cdef double activity = 0
@@ -157,12 +167,79 @@ cdef class cIController(cPController):
         # integrate species activity
         for count in xrange(N):
             state = self.species.data.as_uints[index]
-            n = cumul.data.as_doubles[state]
+            n = controlled[state]
             k = self.species_dependence.data.as_doubles[index]
             activity += (n * k)
             index += 1
 
         return activity
+
+    cdef double evaluate_rxn_rate(self,
+                                   unsigned int rxn,
+                                   double *controlled) nogil:
+        """
+        Evaluates and returns rate for specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - index of reaction
+
+            controlled (double*) - controlled variable values
+
+        Returns:
+
+            rate (double) - reaction rate
+
+        """
+
+        cdef double activity, rate
+
+        # compute species activities
+        activity = self.evaluate_integrator_sum(rxn, controlled)
+
+        # set rate
+        rate = self.k.data.as_doubles[rxn] * activity
+        if rate < 0:
+            rate = 0.
+
+        return rate
+
+    cdef double c_evaluate_rate(self,
+                                unsigned int rxn,
+                                array controlled) nogil:
+        """
+        Evaluates and returns rate of specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+            controlled (array[double]) - controlled variable values
+
+        Returns:
+
+            rate (float) - reaction rate
+
+        """
+
+        cdef unsigned int count, ind
+        cdef double n, value
+        cdef unsigned int index
+        cdef unsigned int N = self.n_active_species.data.as_uints[rxn]
+        cdef double k = self.k.data.as_doubles[rxn]
+        cdef double activity = 1
+
+        # integrate species activity
+        index = self.species_ind.data.as_uints[rxn]
+        for count in xrange(N):
+            ind = self.species.data.as_uints[index]
+            value = controlled.data.as_doubles[ind]
+            n = self.species_dependence.data.as_doubles[index]
+            activity += (value*n)
+            index += 1
+
+        return k*activity
+
 
 
 #=============================== PYTHON CODE ==================================

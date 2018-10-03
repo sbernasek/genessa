@@ -88,13 +88,13 @@ cdef class cSignal:
         for index in xrange(self.I):
             self.value.data.as_doubles[index] = values.data.as_doubles[index]
 
-    cdef bint compare_value(self, array values, unsigned int index) nogil:
+    cdef bint compare_value(self, double *values, unsigned int index) nogil:
         """
         Compare individual signal value with a reference.
 
         Args:
 
-            values (array[double]) - reference values
+            values (double*) - reference values
 
             index (unsigned int) - signal channel compared
 
@@ -104,17 +104,17 @@ cdef class cSignal:
 
         """
         cdef bint not_equal = 0
-        if self.value.data.as_doubles[index] != values.data.as_doubles[index]:
+        if self.value.data.as_doubles[index] != values[index]:
             not_equal = 1
         return not_equal
 
-    cdef bint compare_all(self, array values) nogil:
+    cdef bint compare_all(self, double *values) nogil:
         """
         Compare all signal values with a reference.
 
         Args:
 
-            values (array[double]) - reference values
+            values (double*) - reference values
 
         Returns:
 
@@ -123,10 +123,8 @@ cdef class cSignal:
         """
         cdef bint not_equal = 0
         cdef unsigned int index
-        cdef double value
         for index in xrange(self.I):
-            value = values.data.as_doubles[index]
-            if self.value.data.as_doubles[index] != value:
+            if self.value.data.as_doubles[index] != values[index]:
                 not_equal = 1
                 break
         return not_equal

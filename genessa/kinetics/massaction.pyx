@@ -23,6 +23,7 @@ cdef class cMassAction(cInputDependent):
 
     @staticmethod
     cdef cMassAction get_blank_cMassAction():
+        """ Returns blank cMassAction instance. """
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
         return cMassAction(0, xf, xl, xl, xf, xl, xl, xf)
@@ -57,8 +58,8 @@ cdef class cMassAction(cInputDependent):
 
     cdef double evaluate_rxn_rate(self,
                                    unsigned int rxn,
-                                   array states,
-                                   array inputs) nogil:
+                                   unsigned int *states,
+                                   double *inputs) nogil:
         """
         Evaluates and returns rate for specified reaction.
 
@@ -66,9 +67,9 @@ cdef class cMassAction(cInputDependent):
 
             rxn (unsigned int) - index of reaction
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
-            inputs (array[double]) - input values
+            inputs (double*) - input values
 
         Returns:
 

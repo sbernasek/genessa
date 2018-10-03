@@ -111,7 +111,7 @@ cdef class cSystem:
 
         return cSystem(N, M, I, S, R)
 
-    cdef array get_rxn_rates(self):
+    cdef double* get_rxn_rates(self):
         """ Returns current reaction rates. """
         return self.R.rates
 

@@ -8,8 +8,8 @@ cdef class cSignal:
     cdef void update(self, double t) nogil
     cdef void reset(self) nogil
     cdef void set_value(self, array values) nogil
-    cdef bint compare_value(self, array values, unsigned int index) nogil
-    cdef bint compare_all(self, array values) nogil
+    cdef bint compare_value(self, double *values, unsigned int index) nogil
+    cdef bint compare_all(self, double *values) nogil
 
 cdef class cSquarePulse(cSignal):
     cdef double t_on, t_off

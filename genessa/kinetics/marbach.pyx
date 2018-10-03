@@ -52,6 +52,7 @@ cdef class cRegulatoryModule:
 
     @staticmethod
     cdef cRegulatoryModule get_blank_cRegulatoryModule(unsigned int M):
+        """ Returns blank cRegulatoryModule instance. """
         cdef unsigned int i
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
@@ -91,7 +92,7 @@ cdef class cRegulatoryModule:
 
     cdef double set_fractional_activation(self,
                                           unsigned int mod,
-                                          array states) nogil:
+                                          unsigned int *states) nogil:
         """ Set fractional activation for modifiers of specified module. """
         cdef unsigned int count, state, modifier
         cdef double k, n
@@ -101,7 +102,7 @@ cdef class cRegulatoryModule:
         # set fractional activation for each modifier
         for count in xrange(N):
             modifier = self.species.data.as_uints[index]
-            state = states.data.as_uints[modifier]
+            state = states[modifier]
             k = self.k.data.as_doubles[index]
             n = self.n.data.as_doubles[index]
             self.xi.data.as_doubles[index] = (state/k)**n
@@ -109,8 +110,17 @@ cdef class cRegulatoryModule:
 
     cdef void set_activation(self,
                              unsigned int mod,
-                             array states) nogil:
-        """ Set activation for specified regulatory module. """
+                             unsigned int *states) nogil:
+        """
+        Set activation for specified regulatory module.
+
+        Args:
+
+            mod (unsigned int) - index of regulatory module
+
+            states (unsigned int*) - state values
+
+        """
 
         cdef unsigned int i
         cdef unsigned int nA = self.nA.data.as_uints[mod]
@@ -145,21 +155,53 @@ cdef class cRegulatoryModule:
         # set activation
         self.activation.data.as_doubles[mod] = numerator/denominator
 
-    cdef double get_activation(self,
-                               unsigned int mod) nogil:
-        """ Get activation for specified regulatory module. """
+    cdef double get_activation(self, unsigned int mod) nogil:
+        """
+        Returns activation for specified regulatory module.
+
+        Args:
+
+            mod (unsigned int) - index of regulatory module
+
+        Returns:
+
+            activation (double)
+
+        """
         return self.activation.data.as_doubles[mod]
 
     cdef void update(self,
-                     array states,
+                     unsigned int *states,
                      unsigned int fired) nogil:
-        """ Update occupancies for repressors that have changed. """
+        """
+        Update activities for regulatory modules that have changed.
+
+        Args:
+
+            states (unsigned int*) - state values
+
+            fired (unsigned int) - index of reaction that fired
+
+        """
         self.rxn_map.app(self, fired, self.set_activation, states)
 
-    cdef double cget_activation(self,
+    cdef double c_evaluate_activation(self,
                                 array states,
                                 unsigned int mod) nogil:
-        """ Get activation of specified regulatory module """
+        """
+        Evaluates and returns activation of specified regulatory module.
+
+        Args:
+
+            states (array[double]) - state values
+
+            mod (unsigned int) - index of regulatory module
+
+        Returns:
+
+            activation (double)
+
+        """
 
         cdef unsigned int i, species
         cdef double k, n, value
@@ -249,6 +291,7 @@ cdef class cTranscription:
 
     @staticmethod
     cdef cTranscription get_blank_cTranscription(unsigned int M):
+        """ Returns blank cTranscription instance. """
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
         cdef cRegulatoryModule mod = cRegulatoryModule.get_blank_cRegulatoryModule(M)
@@ -286,10 +329,19 @@ cdef class cTranscription:
 
         return cTranscription(M, k, alpha, alpha_ind, modules_obj, modules_ind, inputs_ind, inputs, input_dependence)
 
-    cdef double apply_perturbation(self,
+    cdef void apply_perturbation(self,
                                    unsigned int rxn,
                                    double ptb) nogil:
-        """ Apply perturbation to alpha values for specified reaction. """
+        """
+        Apply perturbation to alpha values for specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+            ptb (double) - magnitude of perturbation
+
+        """
 
         cdef unsigned int alpha_index = self.alpha_ind.data.as_uints[rxn]
         cdef unsigned int num_alpha = self.num_alpha.data.as_uints[rxn]
@@ -319,9 +371,16 @@ cdef class cTranscription:
             # store perturbed alpha value
             self.alpha.data.as_doubles[alpha_index+i] = a_ptb
 
-    cdef double remove_perturbation(self,
+    cdef void remove_perturbation(self,
                                     unsigned int rxn) nogil:
-        """ Restore specified reaction to wildtype alpha values. """
+        """
+        Remove perturbation and restore specified reaction to wildtype alpha values.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+        """
 
         cdef unsigned int alpha_index = self.alpha_ind.data.as_uints[rxn]
         cdef unsigned int num_alpha = self.num_alpha.data.as_uints[rxn]
@@ -333,10 +392,19 @@ cdef class cTranscription:
             alpha = self.alpha_wt.data.as_doubles[alpha_index+i]
             self.alpha.data.as_doubles[alpha_index+i] = alpha
 
-    cdef double get_activation(self,
-                               unsigned int rxn,
-                               array states) nogil:
-        """ Determine gene activation for specified states. """
+    cdef double get_activation(self, unsigned int rxn) nogil:
+        """
+        Evaluate and return activation of specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+        Returns:
+
+            activation (double)
+
+        """
 
         cdef unsigned int mod_index = self.modules_ind.data.as_uints[rxn]
         cdef unsigned int num_modules = self.num_modules.data.as_uints[rxn]
@@ -366,8 +434,21 @@ cdef class cTranscription:
 
     cdef double get_rate_modifier(self,
                                   unsigned int rxn,
-                                  array input_values) nogil:
-        """ Integrate input_values with input_dependence. """
+                                  double *inputs) nogil:
+        """
+        Evaluate and return rate modifier by integrating input values.
+
+        Args:
+
+            rxn (unsigned int) - reaction index
+
+            inputs (double*) - input values
+
+        Returns:
+
+            modifier (double)
+
+        """
         cdef unsigned int index = self.inputs_ind.data.as_uints[rxn]
         cdef unsigned int num_inputs = self.num_inputs.data.as_uints[rxn]
         cdef unsigned int i, input_dim
@@ -378,15 +459,12 @@ cdef class cTranscription:
         for i in xrange(num_inputs):
             input_dim = self.inputs.data.as_uints[index+i]
             dependence = self.input_dependence.data.as_doubles[index+i]
-            input_value = input_values.data.as_doubles[input_dim]
+            input_value = inputs[input_dim]
             modifier += (dependence*input_value)
 
         return modifier
 
-    cdef double evaluate_rxn_rate(self,
-                       unsigned int rxn,
-                       array states,
-                       array inputs) nogil:
+    cdef double evaluate_rxn_rate(self, unsigned int rxn) nogil:
         """
         Evaluates and returns rate for specified reaction.
 
@@ -394,23 +472,18 @@ cdef class cTranscription:
 
             rxn (unsigned int) - index of reaction
 
-            states (array[unsigned int]) - state values
-
-            inputs (array[double]) - input values
-
         Returns:
 
             rate (double) - reaction rate
 
         """
         cdef double k = self.k.data.as_doubles[rxn]
-        cdef double activation = self.get_activation(rxn, states)
+        cdef double activation = self.get_activation(rxn)
         return k * activation
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                array states,
-                                array inputs) nogil:
+                                array states) nogil:
         """
         Evaluates and returns rate of specified reaction.
 
@@ -420,16 +493,36 @@ cdef class cTranscription:
 
             states (array[double]) - state values
 
-            inputs (array[double]) - input values
-
         Returns:
 
             rate (float) - reaction rate
 
         """
-
         cdef double k = self.k.data.as_doubles[rxn]
-        cdef double activation = self.get_activation(rxn, states)
+        cdef unsigned int mod_index = self.modules_ind.data.as_uints[rxn]
+        cdef unsigned int num_modules = self.num_modules.data.as_uints[rxn]
+        cdef unsigned int alpha_index = self.alpha_ind.data.as_uints[rxn]
+        cdef unsigned int num_alpha = self.num_alpha.data.as_uints[rxn]
+
+        cdef unsigned int i, j
+        cdef double alpha
+        cdef double factivation, p
+        cdef double microstate_size
+        cdef double activation = 0
+
+        # integrate activation across regulatory modules
+        for i in xrange(num_alpha):
+            microstate_size = get_binary_repr_size(i)
+            p = 1
+            for j in xrange(num_modules):
+                factivation = self.modules_obj.c_evaluate_activation(states, mod_index+j)
+                if microstate_size-j-1 >= 0 and ((i >> j) & 1) == 1:
+                    p *= factivation
+                else:
+                    p *= (1-factivation)
+
+            alpha = self.alpha.data.as_doubles[alpha_index+i]
+            activation += (alpha * p)
 
         return k * activation
 
@@ -453,7 +546,7 @@ cdef class cRxnMap:
                   cRegulatoryModule mod_obj,
                   unsigned int key,
                   cSetActivation f,
-                  array states) nogil:
+                  unsigned int *states) nogil:
         cdef unsigned int count, mod
         cdef unsigned int length = self.lengths.data.as_uints[key]
         cdef unsigned int index = self.ind.data.as_uints[key]

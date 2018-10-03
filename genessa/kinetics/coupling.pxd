@@ -18,13 +18,21 @@ cdef class cSDRepressor(cSpeciesDependent):
     @staticmethod
     cdef cSDRepressor from_list(list rxns, dict rxn_map)
 
-    cdef double get_species_activity(self, unsigned int rep, array states) nogil
+    cdef double get_species_activity(self,
+        unsigned int rep,
+        unsigned int *states) nogil
 
-    cdef void set_occupancy(self, unsigned int rep, array states) nogil
+    cdef void set_occupancy(self,
+        unsigned int rep,
+        unsigned int *states) nogil
 
-    cdef void update(self, array states, unsigned int fired) nogil
+    cdef void update(self,
+        unsigned int *states,
+        unsigned int fired) nogil
 
-    cdef double cget_occupancy(self, array states, unsigned int rep) nogil
+    cdef double cget_occupancy(self,
+        array states,
+        unsigned int rep) nogil
 
 
 cdef class cCoupling(cSpeciesDependent):
@@ -44,19 +52,29 @@ cdef class cCoupling(cSpeciesDependent):
     @staticmethod
     cdef cCoupling from_list(list rxns, dict edge_map, dict repressor_map)
 
-    cdef double get_availability(self, unsigned int rxn, array states) nogil
+    cdef double get_availability(self,
+        unsigned int rxn,
+        unsigned int *states) nogil
 
-    cdef void update_edge(self, unsigned int edge, array states) nogil
+    cdef void update_edge(self,
+        unsigned int edge,
+        unsigned int *states) nogil
 
-    cdef void update_edges(self, array states, unsigned int fired) nogil
+    cdef void update_edges(self,
+        unsigned int *states,
+        unsigned int fired) nogil
 
-    cdef double evaluate_rxn_rate(self, unsigned int rxn, array states) nogil
+    cdef double evaluate_rxn_rate(self,
+        unsigned int rxn,
+        unsigned int *states) nogil
 
-    cdef double c_evaluate_rate(self, unsigned int rxn, array states) nogil
+    cdef double c_evaluate_rate(self,
+        unsigned int rxn,
+        array states) nogil
 
 
-ctypedef void (*cSetOccupancy)(cSDRepressor, unsigned int, array) nogil
-ctypedef void (*cSetEdge)(cCoupling, unsigned int, array) nogil
+ctypedef void (*cSetOccupancy)(cSDRepressor, unsigned int, unsigned int*) nogil
+ctypedef void (*cSetEdge)(cCoupling, unsigned int, unsigned int*) nogil
 
 
 cdef class cRxnMap:
@@ -65,7 +83,14 @@ cdef class cRxnMap:
     cdef array ind, lengths, values
 
     # methods
-    cdef void app(self, cCoupling coupling_obj, unsigned int key, cSetEdge f, array states) nogil
+    cdef void app(self,
+        cCoupling coupling_obj,
+        unsigned int key,
+        cSetEdge f,
+        unsigned int *states) nogil
 
-    cdef void app_rep(self, cSDRepressor rep_obj, unsigned int key, cSetOccupancy f, array states) nogil
-
+    cdef void app_rep(self,
+        cSDRepressor rep_obj,
+        unsigned int key,
+        cSetOccupancy f,
+        unsigned int *states) nogil

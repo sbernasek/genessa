@@ -14,11 +14,11 @@ cdef class cMassAction(cInputDependent):
     cdef cMassAction from_list(list rxns)
 
     cdef double evaluate_rxn_rate(self,
-                                 unsigned int rxn,
-                                 array states,
-                                 array inputs) nogil
+        unsigned int rxn,
+        unsigned int *states,
+        double *inputs) nogil
 
     cdef double c_evaluate_rate(self,
-                                unsigned int rxn,
-                                array states,
-                                array inputs) nogil
+        unsigned int rxn,
+        array states,
+        array inputs) nogil

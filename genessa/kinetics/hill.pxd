@@ -17,22 +17,22 @@ cdef class cIDRepressor(cInputDependent):
     cdef cIDRepressor from_list(list rxns)
 
     cdef double get_species_activity(self,
-                                     unsigned int rep,
-                                     array states) nogil
+        unsigned int rep,
+        unsigned int *states) nogil
 
     cdef double get_input_activity(self,
-                                   unsigned int rep,
-                                   array inputs) nogil
+        unsigned int rep,
+        double *inputs) nogil
 
     cdef double get_occupancy(self,
-                              unsigned int rep,
-                              array states,
-                              array inputs) nogil
+        unsigned int rep,
+        unsigned int *states,
+        double *inputs) nogil
 
     cdef double cget_occupancy(self,
-                               array states,
-                               array input_values,
-                               unsigned int rep) nogil
+        array states,
+        array input_values,
+        unsigned int rep) nogil
 
 
 cdef class cHill(cIDRepressor):
@@ -49,24 +49,24 @@ cdef class cHill(cIDRepressor):
     cdef cHill from_list(list rxns)
 
     cdef double get_species_activity(self,
-                                     unsigned int rxn,
-                                     array states) nogil
+        unsigned int rxn,
+        unsigned int *states) nogil
 
     cdef double get_input_activity(self,
-                                   unsigned int rxn,
-                                   array inputs) nogil
+        unsigned int rxn,
+        double *inputs) nogil
 
     cdef double get_availability(self,
-                                 unsigned int rxn,
-                                 array states,
-                                 array inputs)nogil
+        unsigned int rxn,
+        unsigned int *states,
+        double *inputs)nogil
 
     cdef double evaluate_rxn_rate(self,
-                                 unsigned int rxn,
-                                 array states,
-                                 array inputs) nogil
+        unsigned int rxn,
+        unsigned int *states,
+        double *inputs) nogil
 
     cdef double c_evaluate_rate(self,
-                                unsigned int rxn,
-                                array states,
-                                array inputs) nogil
+        unsigned int rxn,
+        array states,
+        array inputs) nogil

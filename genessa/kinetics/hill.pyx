@@ -35,6 +35,7 @@ cdef class cIDRepressor(cInputDependent):
 
     @staticmethod
     cdef cIDRepressor get_blank_cIDRepressor():
+        """ Returns blank cIDRepressor instance. """
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
         return cIDRepressor(0, xf, xf, xl, xl, xf, xl, xl, xf)
@@ -72,19 +73,34 @@ cdef class cIDRepressor(cInputDependent):
 
     cdef double get_species_activity(self,
                                      unsigned int rep,
-                                     array states) nogil:
+                                     unsigned int *states) nogil:
         return self.get_species_activity_sum(rep, states)
 
     cdef double get_input_activity(self,
                                    unsigned int rep,
-                                   array inputs) nogil:
+                                   double *inputs) nogil:
         return self.get_input_activity_sum(rep, inputs)
 
     cdef double get_occupancy(self,
                               unsigned int rep,
-                              array states,
-                              array inputs) nogil:
-        """ Get occupancy by specified repressor. """
+                              unsigned int *states,
+                              double *inputs) nogil:
+        """
+        Evaluates and returns occupancy of specified repressor.
+
+        Args:
+
+            rep (unsigned int) - repressor index
+
+            states (unsigned int*) - state values
+
+            inputs (double*) - input values
+
+        Returns:
+
+            occupancy (double) - repressor occupancy
+
+        """
         cdef double activity = 0
         cdef double k_m, n
         cdef double occupancy
@@ -103,9 +119,24 @@ cdef class cIDRepressor(cInputDependent):
 
     cdef double cget_occupancy(self,
                                array states,
-                               array input_values,
+                               array inputs,
                                unsigned int rep) nogil:
-        """ Get rate of specified reaction """
+        """
+        Evaluates and returns occupancy of specified repressor.
+
+        Args:
+
+            states (array[double]) - state values
+
+            inputs (array[double]) - input values
+
+            rep (unsigned int) - repressor index
+
+        Returns:
+
+            occupancy (double) - repressor occupancy
+
+        """
 
         cdef unsigned int count, ind
         cdef double coefficient, value
@@ -130,7 +161,7 @@ cdef class cIDRepressor(cInputDependent):
         index = self.inputs_ind.data.as_uints[rep]
         for count in xrange(I):
             ind = self.inputs.data.as_uints[index]
-            value = input_values.data.as_doubles[ind]
+            value = inputs.data.as_doubles[ind]
             coefficient = self.input_dependence.data.as_doubles[index]
             activity += (value*coefficient)
             index += 1
@@ -170,6 +201,7 @@ cdef class cHill(cIDRepressor):
 
     @staticmethod
     cdef cHill get_blank_cHill():
+        """ Returns blank cHill instance. """
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
         cdef cIDRepressor rep = cIDRepressor.get_blank_cIDRepressor()
@@ -213,19 +245,34 @@ cdef class cHill(cIDRepressor):
 
     cdef double get_species_activity(self,
                                      unsigned int rxn,
-                                     array states) nogil:
+                                     unsigned int *states) nogil:
         return self.get_species_activity_sum(rxn, states)
 
     cdef double get_input_activity(self,
                                    unsigned int rxn,
-                                   array inputs) nogil:
+                                   double *inputs) nogil:
         return self.get_input_activity_sum(rxn, inputs)
 
     cdef double get_availability(self,
                                  unsigned int rxn,
-                                 array states,
-                                 array inputs) nogil:
-        """ Integrate all repressor activity to determine availability. """
+                                 unsigned int *states,
+                                 double *inputs) nogil:
+        """
+        Evaluates and returns availability of specified reaction.
+
+        Args:
+
+            rxn (unsigned int) - repressor index
+
+            states (unsigned int*) - state values
+
+            inputs (double*) - input values
+
+        Returns:
+
+            availability (double) - reaction availability
+
+        """
 
         cdef unsigned int count
         cdef double occupancy
@@ -243,8 +290,8 @@ cdef class cHill(cIDRepressor):
 
     cdef double evaluate_rxn_rate(self,
                                    unsigned int rxn,
-                                   array states,
-                                   array inputs) nogil:
+                                   unsigned int *states,
+                                   double *inputs) nogil:
         """
         Evaluates and returns rate for specified reaction.
 
@@ -252,9 +299,9 @@ cdef class cHill(cIDRepressor):
 
             rxn (unsigned int) - index of reaction
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
-            inputs (array[double]) - input values
+            inputs (double*) - input values
 
         Returns:
 
@@ -281,7 +328,6 @@ cdef class cHill(cIDRepressor):
         availability = self.get_availability(rxn, states, inputs)
         rate *= availability
 
-        #self.rates.data.as_doubles[rxn] = rate
         return rate
 
     cdef double c_evaluate_rate(self,

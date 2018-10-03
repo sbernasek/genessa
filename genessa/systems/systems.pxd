@@ -22,7 +22,7 @@ cdef class cSystem:
     cdef cRates R
 
     # methods
-    cdef array get_rxn_rates(self)
+    cdef double* get_rxn_rates(self)
 
     cdef double get_total_rxn_rate(self) nogil
 

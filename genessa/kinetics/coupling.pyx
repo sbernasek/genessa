@@ -35,6 +35,7 @@ cdef class cSDRepressor(cSpeciesDependent):
 
     @staticmethod
     cdef cSDRepressor get_blank_cSDRepressor(unsigned int M):
+        """ Returns blank cSDRepressor instance. """
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
         cdef dict rxn_map = {i: [] for i in xrange(M)}
@@ -70,12 +71,12 @@ cdef class cSDRepressor(cSpeciesDependent):
 
     cdef double get_species_activity(self,
                                      unsigned int rep,
-                                     array states) nogil:
+                                     unsigned int *states) nogil:
         return self.get_species_activity_sum(rep, states)
 
     cdef void set_occupancy(self,
                             unsigned int rep,
-                            array states) nogil:
+                            unsigned int *states) nogil:
         """ Get occupancy by specified repressor. """
         cdef double activity
         cdef double k_m, n
@@ -92,14 +93,14 @@ cdef class cSDRepressor(cSpeciesDependent):
         self.occupancies.data.as_doubles[rep] = occupancy
 
     cdef void update(self,
-                     array states,
+                     unsigned int *states,
                      unsigned int fired) nogil:
         """
         Update occupancies following a reaction firing.
 
         Args:
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
             fired (unsigned int) - index of fired reaction
 
@@ -169,6 +170,7 @@ cdef class cCoupling(cSpeciesDependent):
 
     @staticmethod
     cdef cCoupling get_blank_cCoupling(unsigned int M):
+        """ Returns blank cCoupling object. """
         cdef np.ndarray xf = np.zeros(1, dtype=np.float64)
         cdef np.ndarray xl = np.zeros(1, dtype=np.uint32)
         cdef cSDRepressor rep = cSDRepressor.get_blank_cSDRepressor(M)
@@ -213,7 +215,7 @@ cdef class cCoupling(cSpeciesDependent):
 
     cdef double get_availability(self,
                                  unsigned int rxn,
-                                 array states) nogil:
+                                 unsigned int *states) nogil:
         """
         Integrate repressor occupancies to determine overall availability for a specified promoter.
 
@@ -221,7 +223,7 @@ cdef class cCoupling(cSpeciesDependent):
 
             rxn (unsigned int) - index of transcription reaction
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values (not used)
 
         Returns:
 
@@ -245,7 +247,7 @@ cdef class cCoupling(cSpeciesDependent):
 
     cdef double evaluate_rxn_rate(self,
                                    unsigned int rxn,
-                                   array states) nogil:
+                                   unsigned int *states) nogil:
         """
         Evaluates and returns rate for specified reaction.
 
@@ -253,7 +255,7 @@ cdef class cCoupling(cSpeciesDependent):
 
             rxn (unsigned int) - index of reaction
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
         Returns:
 
@@ -275,7 +277,7 @@ cdef class cCoupling(cSpeciesDependent):
 
     cdef void update_edge(self,
                               unsigned int edge,
-                              array states) nogil:
+                              unsigned int *states) nogil:
         """
         Update edge weight.
 
@@ -283,7 +285,7 @@ cdef class cCoupling(cSpeciesDependent):
 
             edge (unsigned int) - index of edge
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
         """
         cdef int weight
@@ -294,7 +296,7 @@ cdef class cCoupling(cSpeciesDependent):
         # get new edge value
         weight = <int>self.species_dependence.data.as_doubles[edge]
         state_ind = self.species.data.as_uints[edge]
-        new_edge = weight * states.data.as_uints[state_ind]
+        new_edge = weight * states[state_ind]
 
         # update rxn activity
         rxn = self.edge_to_rxn.data.as_uints[edge]
@@ -305,14 +307,14 @@ cdef class cCoupling(cSpeciesDependent):
         self.edges.data.as_uints[edge] = new_edge
 
     cdef void update_edges(self,
-                                array states,
+                                unsigned int *states,
                                 unsigned int fired) nogil:
         """
         Update edge weights following a reaction event.
 
         Args:
 
-            states (array[unsigned int]) - state values
+            states (unsigned int*) - state values
 
             fired (unsigned int) - fired reaction
 
@@ -389,7 +391,7 @@ cdef class cRxnMap:
                       cSDRepressor rep_obj,
                       unsigned int key,
                       cSetOccupancy f,
-                      array states) nogil:
+                      unsigned int *states) nogil:
         cdef unsigned int count, rep
         cdef unsigned int length = self.lengths.data.as_uints[key]
         cdef unsigned int index = self.ind.data.as_uints[key]
@@ -404,7 +406,7 @@ cdef class cRxnMap:
                    cCoupling coupling_obj,
                    unsigned int key,
                    cSetEdge f,
-                   array states) nogil:
+                   unsigned int *states) nogil:
         cdef unsigned int count, edge
         cdef unsigned int length = self.lengths.data.as_uints[key]
         cdef unsigned int index = self.ind.data.as_uints[key]
