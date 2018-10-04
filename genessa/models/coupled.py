@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy
 
 # intra-package python imports
-from ..systems.networks import Network
+from ..networks.networks import Network
 from ..kinetics.hill import Repressor
 from ..kinetics.coupling import Coupling
 from .cells import Cell

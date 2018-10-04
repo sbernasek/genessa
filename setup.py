@@ -256,16 +256,16 @@ ext_modules =[
     declare_extension("genessa.signals.signals", ext_type, dirs),
 
     # rate functions
-    declare_extension("genessa.systems.rates", ext_type, dirs),
+    declare_extension("genessa.solver.rates", ext_type, dirs),
 
-    # networks
-    declare_extension("genessa.systems.stoichiometry", ext_type, dirs),
+    # stoichiometry
+    declare_extension("genessa.solver.stoichiometry", ext_type, dirs),
 
-    # networks
-    declare_extension("genessa.systems.systems", ext_type, dirs),
+    # deterministic simulation
+    declare_extension("genessa.solver.deterministic", ext_type, dirs),
 
-    # ssa
-    declare_extension("genessa.solver.ssa", ext_type, dirs)
+    # stochastic simulation
+    declare_extension("genessa.solver.stochastic", ext_type, dirs)
 
     ]
 

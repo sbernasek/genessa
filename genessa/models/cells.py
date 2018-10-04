@@ -3,7 +3,7 @@ import networkx as nx
 from copy import copy
 
 # intra-package python imports
-from ..systems.networks import Network
+from ..networks.networks import Network
 from ..kinetics.massaction import MassAction
 from ..kinetics.hill import Hill
 from .genes import Gene
