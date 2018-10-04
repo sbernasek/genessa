@@ -118,7 +118,7 @@ cdef class cIDRepressor(cInputDependent):
         return occupancy
 
     cdef double cget_occupancy(self,
-                               array states,
+                               double* states,
                                array inputs,
                                unsigned int rep) nogil:
         """
@@ -126,7 +126,7 @@ cdef class cIDRepressor(cInputDependent):
 
         Args:
 
-            states (array[double]) - state values
+            states (double*) - state values
 
             inputs (array[double]) - input values
 
@@ -152,7 +152,7 @@ cdef class cIDRepressor(cInputDependent):
         index = self.species_ind.data.as_uints[rep]
         for count in xrange(N):
             ind = self.species.data.as_uints[index]
-            value = states.data.as_doubles[ind]
+            value = states[ind]
             coefficient = self.species_dependence.data.as_doubles[index]
             activity += (value*coefficient)
             index += 1
@@ -332,7 +332,7 @@ cdef class cHill(cIDRepressor):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                array states,
+                                double* states,
                                 array inputs) nogil:
         """
         Evaluates and returns rate of specified reaction.
@@ -341,7 +341,7 @@ cdef class cHill(cIDRepressor):
 
             rxn (unsigned int) - reaction index
 
-            states (array[double]) - state values
+            states (double*) - state values
 
             inputs (array[double]) - input values
 
@@ -368,7 +368,7 @@ cdef class cHill(cIDRepressor):
         index = self.species_ind.data.as_uints[rxn]
         for count in xrange(N):
             ind = self.species.data.as_uints[index]
-            value = states.data.as_doubles[ind]
+            value = states[ind]
             coefficient = self.species_dependence.data.as_doubles[index]
             activity += (value*coefficient)
             index += 1

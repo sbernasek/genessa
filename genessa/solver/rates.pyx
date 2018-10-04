@@ -17,6 +17,7 @@ import numpy as np
 from array import array
 from functools import reduce
 from operator import add
+import ctypes
 
 # cython intra-package imports
 from ..kinetics.massaction cimport cMassAction
@@ -25,6 +26,7 @@ from ..kinetics.hill cimport cHill
 from ..kinetics.marbach cimport cTranscription
 from ..kinetics.coupling cimport cCoupling
 from .rates cimport cRates, cRxnMap
+
 
 
 # ============================= CYTHON CODE ===================================
@@ -348,19 +350,19 @@ cdef class cRates:
             self.update_rxn_rate(rxn, states, inputs, cumulative)
 
     cpdef array c_evaluate_rxn_rates(self,
-                                     array states,
-                                     array inputs,
-                                     array cumulative):
+        np.ndarray[np.float64_t, ndim=1, mode='c'] states,
+        array inputs,
+        np.ndarray[np.float64_t, ndim=1, mode='c'] cumulative):
         """
         Evaluates all reaction rates and returns reaction rate vector.
 
         Args:
 
-            states (array[double]) - state values
+            states (np.ndarray[double]) - state values (c-contiguous)
 
             inputs (array[double]) - input values
 
-            cumulative (array[double]) - integrator values
+            cumulative (np.ndarray[double]) - integrator values (c-contiguous)
 
         Returns:
 
@@ -371,6 +373,10 @@ cdef class cRates:
         cdef unsigned int rxn
         cdef double rate = 0
         cdef unsigned int rxn_type, key
+
+        # get raw pointer for states and accumulator
+        cdef double* states_ptr = <double*> states.data
+        cdef double* cumulative_ptr = <double*> cumulative.data
 
         # initialize reaction rates as array of zeros
         cdef array rates = array('d', self.M*[0.])
@@ -384,17 +390,17 @@ cdef class cRates:
 
             # evaluate reaction rate
             if rxn_type == 0:
-                rate = self.coupling.c_evaluate_rate(key, states)
+                rate = self.coupling.c_evaluate_rate(key, states_ptr)
             elif rxn_type == 1:
-                rate = self.massaction.c_evaluate_rate(key, states, inputs)
+                rate = self.massaction.c_evaluate_rate(key, states_ptr, inputs)
             elif rxn_type == 2:
-                rate = self.transcription.c_evaluate_rate(key, states)
+                rate = self.transcription.c_evaluate_rate(key, states_ptr)
             elif rxn_type == 3:
-                rate = self.hill.c_evaluate_rate(key, states, inputs)
+                rate = self.hill.c_evaluate_rate(key, states_ptr, inputs)
             elif rxn_type == 4:
-                rate = self.icontrol.c_evaluate_rate(key, cumulative)
+                rate = self.icontrol.c_evaluate_rate(key, cumulative_ptr)
             elif rxn_type == 5:
-                rate = self.pcontrol.c_evaluate_rate(key, states)
+                rate = self.pcontrol.c_evaluate_rate(key, states_ptr)
             else:
                 pass
 

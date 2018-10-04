@@ -30,7 +30,7 @@ cdef class cIDRepressor(cInputDependent):
         double *inputs) nogil
 
     cdef double cget_occupancy(self,
-        array states,
+        double* states,
         array input_values,
         unsigned int rep) nogil
 
@@ -68,5 +68,5 @@ cdef class cHill(cIDRepressor):
 
     cdef double c_evaluate_rate(self,
         unsigned int rxn,
-        array states,
+        double* states,
         array inputs) nogil

@@ -186,14 +186,14 @@ cdef class cRegulatoryModule:
         self.rxn_map.app(self, fired, self.set_activation, states)
 
     cdef double c_evaluate_activation(self,
-                                array states,
+                                double* states,
                                 unsigned int mod) nogil:
         """
         Evaluates and returns activation of specified regulatory module.
 
         Args:
 
-            states (array[double]) - state values
+            states (double*) - state values
 
             mod (unsigned int) - index of regulatory module
 
@@ -217,7 +217,7 @@ cdef class cRegulatoryModule:
         # get numerator
         for i in xrange(nA):
             species = self.species.data.as_uints[index+i]
-            value = states.data.as_doubles[species]
+            value = states[species]
             k = self.k.data.as_doubles[index+i]
             n = self.n.data.as_doubles[index+i]
             multiplyActivators *= ( (value/k)**n )
@@ -230,7 +230,7 @@ cdef class cRegulatoryModule:
                 multiplyInputs = multiplyActivators
                 for i in xrange(nD):
                     species = self.species.data.as_uints[index+nA+i]
-                    value = states.data.as_doubles[species]
+                    value = states[species]
                     k = self.k.data.as_doubles[index+i]
                     n = self.n.data.as_doubles[index+i]
                     multiplyInputs *= ( (value/k)**n )
@@ -238,7 +238,7 @@ cdef class cRegulatoryModule:
         else:
             for i in xrange(nA+nD):
                 species = self.species.data.as_uints[index+i]
-                value = states.data.as_doubles[species]
+                value = states[species]
                 k = self.k.data.as_doubles[index+i]
                 n = self.n.data.as_doubles[index+i]
                 denominator *= (1 + ((value/k)**n))
@@ -483,7 +483,7 @@ cdef class cTranscription:
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                array states) nogil:
+                                double* states) nogil:
         """
         Evaluates and returns rate of specified reaction.
 
@@ -491,7 +491,7 @@ cdef class cTranscription:
 
             rxn (unsigned int) - reaction index
 
-            states (array[double]) - state values
+            states (double*) - state values
 
         Returns:
 

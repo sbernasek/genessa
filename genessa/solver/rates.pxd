@@ -1,3 +1,4 @@
+cimport numpy as np
 from cpython.array cimport array
 
 # cython intra-package imports
@@ -65,9 +66,9 @@ cdef class cRates:
         double *cumulative) nogil
 
     cpdef array c_evaluate_rxn_rates(self,
-        array states,
+        np.ndarray[np.float64_t, ndim=1, mode='c'] states,
         array inputs,
-        array cumulative)
+        np.ndarray[np.float64_t, ndim=1, mode='c'] cumulative)
 
 
 # define mappable function names

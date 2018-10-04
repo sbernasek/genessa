@@ -77,7 +77,16 @@ cdef class cSDRepressor(cSpeciesDependent):
     cdef void set_occupancy(self,
                             unsigned int rep,
                             unsigned int *states) nogil:
-        """ Get occupancy by specified repressor. """
+        """
+        Evaluate and set occupancy by specified repressor.
+
+        Args:
+
+            rep (unsigned int) - repressor index
+
+            states (unsigned int*) - state values
+
+        """
         cdef double activity
         cdef double k_m, n
         cdef double occupancy
@@ -108,9 +117,22 @@ cdef class cSDRepressor(cSpeciesDependent):
         self.rxn_map.app_rep(self, fired, self.set_occupancy, states)
 
     cdef double cget_occupancy(self,
-                               array states,
+                               double* states,
                                unsigned int rep) nogil:
-        """ Get rate of specified reaction """
+        """
+        Evaluate and return occupancy by specified repressor.
+
+        Args:
+
+            states (double*) - state values
+
+            rep (unsigned int) - repressor index
+
+        Returns:
+
+            occupancy (double)
+
+        """
 
         cdef unsigned int count, ind
         cdef double coefficient, value
@@ -125,7 +147,7 @@ cdef class cSDRepressor(cSpeciesDependent):
         index = self.species_ind.data.as_uints[rep]
         for count in xrange(N):
             ind = self.species.data.as_uints[index]
-            value = states.data.as_doubles[ind]
+            value = states[ind]
             coefficient = self.species_dependence.data.as_doubles[index]
             activity += (value*coefficient)
             index += 1
@@ -323,7 +345,7 @@ cdef class cCoupling(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                array states) nogil:
+                                double* states) nogil:
         """
         Evaluates and returns rate of specified reaction.
 
@@ -331,7 +353,7 @@ cdef class cCoupling(cSpeciesDependent):
 
             rxn (unsigned int) - reaction index
 
-            states (array[double]) - state values
+            states (double*) - state values
 
         Returns:
 
@@ -354,7 +376,7 @@ cdef class cCoupling(cSpeciesDependent):
         index = self.species_ind.data.as_uints[rxn]
         for count in xrange(N):
             ind = self.species.data.as_uints[index]
-            value = states.data.as_doubles[ind]
+            value = states[ind]
             coefficient = self.species_dependence.data.as_doubles[index]
             activity += (value*coefficient)
             index += 1

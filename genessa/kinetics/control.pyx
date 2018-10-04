@@ -75,7 +75,7 @@ cdef class cPController(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                array controlled) nogil:
+                                double* controlled) nogil:
         """
         Evaluates and returns rate of specified reaction.
 
@@ -83,7 +83,7 @@ cdef class cPController(cSpeciesDependent):
 
             rxn (unsigned int) - reaction index
 
-            controlled (array[double]) - controlled variable values
+            controlled (double*) - controlled variable values
 
         Returns:
 
@@ -102,7 +102,7 @@ cdef class cPController(cSpeciesDependent):
         index = self.species_ind.data.as_uints[rxn]
         for count in xrange(N):
             ind = self.species.data.as_uints[index]
-            value = controlled.data.as_doubles[ind]
+            value = controlled[ind]
             n = self.species_dependence.data.as_doubles[index]
             activity += (value*n)
             index += 1
@@ -206,7 +206,7 @@ cdef class cIController(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                array controlled) nogil:
+                                double* controlled) nogil:
         """
         Evaluates and returns rate of specified reaction.
 
@@ -214,7 +214,7 @@ cdef class cIController(cSpeciesDependent):
 
             rxn (unsigned int) - reaction index
 
-            controlled (array[double]) - controlled variable values
+            controlled (double*) - controlled variable values
 
         Returns:
 
@@ -233,7 +233,7 @@ cdef class cIController(cSpeciesDependent):
         index = self.species_ind.data.as_uints[rxn]
         for count in xrange(N):
             ind = self.species.data.as_uints[index]
-            value = controlled.data.as_doubles[ind]
+            value = controlled[ind]
             n = self.species_dependence.data.as_doubles[index]
             activity += (value*n)
             index += 1

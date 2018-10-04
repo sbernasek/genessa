@@ -31,7 +31,7 @@ cdef class cSDRepressor(cSpeciesDependent):
         unsigned int fired) nogil
 
     cdef double cget_occupancy(self,
-        array states,
+        double* states,
         unsigned int rep) nogil
 
 
@@ -70,7 +70,7 @@ cdef class cCoupling(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
         unsigned int rxn,
-        array states) nogil
+        double* states) nogil
 
 
 ctypedef void (*cSetOccupancy)(cSDRepressor, unsigned int, unsigned int*) nogil

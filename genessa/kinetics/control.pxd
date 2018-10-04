@@ -19,7 +19,7 @@ cdef class cPController(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
         unsigned int rxn,
-        array controlled) nogil
+        double* controlled) nogil
 
 
 cdef class cIController(cSpeciesDependent):
@@ -41,4 +41,4 @@ cdef class cIController(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
         unsigned int rxn,
-        array controlled) nogil
+        double* controlled) nogil

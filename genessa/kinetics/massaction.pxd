@@ -20,5 +20,5 @@ cdef class cMassAction(cInputDependent):
 
     cdef double c_evaluate_rate(self,
         unsigned int rxn,
-        array states,
+        double* states,
         array inputs) nogil

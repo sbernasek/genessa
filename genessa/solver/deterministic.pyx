@@ -4,6 +4,7 @@ from cpython.array cimport array
 
 # python external imports
 import numpy as np
+import ctypes
 from copy import deepcopy
 from scipy.integrate import solve_ivp
 from scipy.interpolate import interp1d
@@ -74,19 +75,19 @@ cdef class cDeterministicSystem:
         return self.R.total_rate
 
     cpdef array c_evaluate_species_rates(self,
-                                       array states,
-                                       array inputs,
-                                       array cumulative):
+        np.ndarray states,
+        array inputs,
+        np.ndarray cumulative):
         """
         Evaluate rate of change for all species.
 
         Args:
 
-            states (array[double]) - state values
+            states (np.ndarray[double]) - state values
 
             inputs (array[double]) - input values
 
-            cumulative (array[double]) - integrator values
+            cumulative (np.ndarray[double]) - integrator values
 
         Returns:
 
@@ -100,7 +101,7 @@ cdef class cDeterministicSystem:
         cdef int coefficient
         cdef array rxn_rates
 
-        # instantiate array of zeros
+        # instantiate array of zeros (double length for adding integrator)
         cdef array rates = array('d', self.N*[0.])
 
         # evaluate reaction rates
@@ -210,6 +211,31 @@ class DeterministicSimulation:
             for rxn in network.reactions:
                 rxn.k *= rate_scaling['translation_capacity']**rxn.ribosome_sensitive
 
+    def differentiate(self, x, inputs):
+        """
+        Evaluate and return rate of change in state space.
+
+        Args:
+
+            x (np.ndarray[float]) - state and integrator values, length 2N
+
+            inputs (array[double]) - input signal values, length I
+
+        Returns:
+
+            dxdt (np.ndarray[float]) - rate of change for states and integrators, length 2N
+
+        """
+
+        # split states and integrator into separate c-contiguous arrays
+        states = np.ascontiguousarray(x[:self.N])
+        cumulative = np.ascontiguousarray(x[self.N:])
+
+        # evaluate state derivatives
+        dxdt = self.solver.c_evaluate_species_rates(states, inputs, cumulative)
+
+        return np.hstack((dxdt, cumulative))
+
     def solve_ivp(self,
                   ic=None,
                   signal=None,
@@ -248,23 +274,19 @@ class DeterministicSimulation:
         if signal is None:
             signal = cSignal([0. for _ in range(self.I)])
 
-        # cumulative is not supported
-        _ = array('d', np.zeros(self.N, dtype=np.float64))
 
-        # define rate function
-        def derivative(t, x):
-            states = array('d', x)
-            inputs = signal(t)
-            dxdt = self.solver.c_evaluate_species_rates(states, inputs, _)
-            return dxdt
+        times = np.arange(0, duration, dt)
 
         # run solver
-        solout = solve_ivp(derivative, (0, duration), ic, method=method)
+        tspan = (0, duration)
+        dxdt = lambda t, x: self.differentiate(x, signal(t))
+        solout = solve_ivp(dxdt, tspan, ic, method, t_eval=times)
 
         # interpolate onto regularly sampled time interval
-        interpolator = interp1d(solout['t'], solout['y'])
-        times = np.arange(0, duration, dt)
-        states = interpolator(times)
+        #interpolator = interp1d(solout['t'], solout['y'])
+        #times = np.arange(0, duration, dt)
+        #states = interpolator(times)
+        states = solout['y']
 
         # instantiate timeseries
         timeseries = TimeSeries(times, states.reshape(1, self.N, times.size))
