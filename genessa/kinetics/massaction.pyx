@@ -88,8 +88,8 @@ cdef class cMassAction(cInputDependent):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                double* states,
-                                array inputs) nogil:
+                                double *states,
+                                double *inputs) nogil:
         """
         Evaluates and returns rate of specified reaction.
 
@@ -99,7 +99,7 @@ cdef class cMassAction(cInputDependent):
 
             states (double*) - state values
 
-            inputs (array[double]) - input values
+            inputs (double*) - input values
 
         Returns:
 
@@ -128,7 +128,7 @@ cdef class cMassAction(cInputDependent):
         index = self.inputs_ind.data.as_uints[rxn]
         for count in xrange(I):
             ind = self.inputs.data.as_uints[index]
-            value = inputs.data.as_doubles[ind]
+            value = inputs[ind]
             n = self.input_dependence.data.as_doubles[index]
             activity *= (value**n)
             index += 1

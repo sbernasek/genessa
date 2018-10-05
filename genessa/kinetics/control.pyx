@@ -75,7 +75,7 @@ cdef class cPController(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                double* controlled) nogil:
+                                double *controlled) nogil:
         """
         Evaluates and returns rate of specified reaction.
 
@@ -206,7 +206,7 @@ cdef class cIController(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                double* controlled) nogil:
+                                double *controlled) nogil:
         """
         Evaluates and returns rate of specified reaction.
 

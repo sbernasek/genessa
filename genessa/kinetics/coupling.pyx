@@ -117,7 +117,7 @@ cdef class cSDRepressor(cSpeciesDependent):
         self.rxn_map.app_rep(self, fired, self.set_occupancy, states)
 
     cdef double cget_occupancy(self,
-                               double* states,
+                               double *states,
                                unsigned int rep) nogil:
         """
         Evaluate and return occupancy by specified repressor.
@@ -345,7 +345,7 @@ cdef class cCoupling(cSpeciesDependent):
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                double* states) nogil:
+                                double *states) nogil:
         """
         Evaluates and returns rate of specified reaction.
 

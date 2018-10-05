@@ -65,10 +65,10 @@ cdef class cRates:
         double *inputs,
         double *cumulative) nogil
 
-    cpdef array c_evaluate_rxn_rates(self,
-        np.ndarray[np.float64_t, ndim=1, mode='c'] states,
-        array inputs,
-        np.ndarray[np.float64_t, ndim=1, mode='c'] cumulative)
+    cpdef double[:] c_evaluate_rxn_rates(self,
+        double[::1] states,
+        double[::1] inputs,
+        double[::1] cumulative)
 
 
 # define mappable function names

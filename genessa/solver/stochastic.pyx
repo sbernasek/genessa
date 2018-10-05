@@ -127,23 +127,23 @@ cdef class cStochasticSystem(cDeterministicSystem):
         if not self.cumulative:
             raise MemoryError('Integrator memory block not allocated.')
 
-    cdef void set_states(self, array x) nogil:
+    cdef void set_states(self, unsigned int[:] values) nogil:
         """ Set state values. """
         cdef unsigned int index
         for index in xrange(self.N):
-            self.states[index] = x.data.as_uints[index]
+            self.states[index] = values[index]
 
-    cdef void set_inputs(self, array x) nogil:
+    cdef void set_inputs(self, double[:] values) nogil:
         """ Set input values. """
         cdef unsigned int index
         for index in xrange(self.I):
-            self.inputs[index] = x.data.as_doubles[index]
+            self.inputs[index] = values[index]
 
-    cdef void set_cumulative(self, array x) nogil:
+    cdef void set_cumulative(self, double[:] values) nogil:
         """ Set integrator values. """
         cdef unsigned int index
         for index in xrange(self.N):
-            self.cumulative[index] = x.data.as_doubles[index]
+            self.cumulative[index] = values[index]
 
     cdef void set_rxn_order(self, double* rates):
         """
@@ -168,8 +168,8 @@ cdef class cStochasticSystem(cDeterministicSystem):
             self.rxn_order[index] = order[index]
 
     cpdef tuple run(self,
-                    unsigned int[::1] ic,
-                    double[::1] integrator_ic,
+                    unsigned int[:] ic,
+                    double[:] integrator_ic,
                     cSignalType signal,
                     double duration=100,
                     double dt=1.):
@@ -178,17 +178,15 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
         Args:
 
-            ic (int[:]) - initial state values
+            ic (unsigned int[:]) - initial state values
 
-            integrator_ic (int[:]) - initial integrator values
+            integrator_ic (double[:]) - initial integrator values
 
-            signal (cSignalType) - function returning signal values
+            signal (cSignalType) - function returning signal value(s)
 
             duration (double) - simulation length
 
-
             dt (double) - sampling interval
-
 
         Returns:
 
@@ -198,17 +196,17 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
         """
 
-        # initialize times and state lists, simulation counters
-        self.set_states(array('I', ic))
-        self.set_cumulative(array('d', integrator_ic))
+        # set initial conditions
+        self.set_states(ic)
+        self.set_cumulative(integrator_ic)
 
         # initialize signal
         self.null_input = 0
         if signal is None:
             self.null_input = 1
-            signal = cSignal([0. for _ in range(self.I)] )
+            signal = cSignal(1, [0. for _ in range(self.I)] )
         signal.reset()
-        self.set_inputs(signal.get_signal(0))
+        self.set_inputs(signal.get_values(0))
 
         # initialize all rates and sort order
         self.R.update_all(self.states, self.inputs, self.cumulative)
@@ -237,7 +235,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
         Args:
 
-            signal (cSignalType) - function returning signal values
+            signal (cSignalType) - function returning signal value(s)
 
             duration (double) - simulation length
 
@@ -288,7 +286,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
                 for index in xrange(self.I):
                     changed = signal.compare_value(self.inputs, index)
                     if changed == 1:
-                        self.inputs[index] = signal.value.data.as_doubles[index]
+                        self.inputs[index] = signal.value[index]
                         self.R.update_after_input_change(self.states,
                                                                self.inputs,
                                                                self.cumulative,
@@ -349,7 +347,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef void fire_reaction(self,
                             unsigned int rxn,
                             unsigned int extent,
-                            unsigned int* states) nogil:
+                            unsigned int *states) nogil:
         """
         Fire a specified reaction by updating state values.
 
@@ -375,8 +373,8 @@ cdef class cStochasticSystem(cDeterministicSystem):
             index += 1
 
     cdef void update_cumulative(self,
-                                unsigned int* states,
-                                double* cumulative,
+                                unsigned int *states,
+                                double *cumulative,
                                 double tau) nogil:
         """
 
@@ -443,7 +441,7 @@ class StochasticSimulation(DeterministicSimulation):
 
             integrator_ic (np.ndarray[np.float64]) - integrator initialization
 
-            signal (cSignalType) - returns signal value(s) for a given time
+            signal (cSignalType) - function returning signal value(s)
 
             duration (float) - simulation duration
 
@@ -576,7 +574,7 @@ class MonteCarloSimulation(StochasticSimulation):
 
             N (int) - number of independent simulation trajectories
 
-            signal (cSignalType) - returns signal value(s) for each time
+            signal (cSignalType) - function returning signal value(s)
 
             duration (float) - simulation duration
 

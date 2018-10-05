@@ -186,7 +186,7 @@ cdef class cRegulatoryModule:
         self.rxn_map.app(self, fired, self.set_activation, states)
 
     cdef double c_evaluate_activation(self,
-                                double* states,
+                                double *states,
                                 unsigned int mod) nogil:
         """
         Evaluates and returns activation of specified regulatory module.
@@ -483,7 +483,7 @@ cdef class cTranscription:
 
     cdef double c_evaluate_rate(self,
                                 unsigned int rxn,
-                                double* states) nogil:
+                                double *states) nogil:
         """
         Evaluates and returns rate of specified reaction.
 

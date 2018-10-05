@@ -1,27 +1,44 @@
-from cpython.array cimport array
+cimport numpy as np
 
 
 cdef class cSignal:
+
+    # attributes
     cdef unsigned int I
-    cdef array value
-    cdef array get_signal(self, double t)
+    cdef double *value
+
+    # methods
+    cpdef double get_value(self, unsigned int index, double t)
+    cpdef np.ndarray get_values(self, double t)
     cdef void update(self, double t) nogil
     cdef void reset(self) nogil
-    cdef void set_value(self, array values) nogil
+    cdef void set_value(self, double *values) nogil
     cdef bint compare_value(self, double *values, unsigned int index) nogil
     cdef bint compare_all(self, double *values) nogil
 
+
 cdef class cSquarePulse(cSignal):
+
+    # attributes
     cdef double t_on, t_off
-    cdef array on, off
+    cdef double on, off
+
 
 cdef class cMultiPulse(cSignal):
-    cdef array t_on, t_off
-    cdef array on, off
+
+    # attributes
+    cdef double *t_on
+    cdef double *t_off
+    cdef double *on
+    cdef double *off
+
 
 cdef class cSquareWave(cSignal):
+
+    # attributes
     cdef double period
-    cdef array on, off
+    cdef double on, off
+
 
 ctypedef fused cSignalType:
     cSignal

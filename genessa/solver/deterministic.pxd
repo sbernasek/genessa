@@ -1,5 +1,4 @@
 # cython external imports
-from cpython.array cimport array
 cimport numpy as np
 
 # import intra-package cython dependencies
@@ -19,7 +18,7 @@ cdef class cDeterministicSystem:
 
     cdef double get_total_rxn_rate(self) nogil
 
-    cpdef array c_evaluate_species_rates(self,
-        np.ndarray states,
-        array inputs,
-        np.ndarray cumulative)
+    cpdef double[:] c_evaluate_species_rates(self,
+        double[::1] states,
+        double[::1] inputs,
+        double[::1] cumulative)

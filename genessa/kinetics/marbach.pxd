@@ -49,7 +49,7 @@ cdef class cRegulatoryModule:
         unsigned int fired) nogil
 
     cdef double c_evaluate_activation(self,
-        double* states,
+        double *states,
         unsigned int mod) nogil
 
 
@@ -98,7 +98,7 @@ cdef class cTranscription:
 
     cdef double c_evaluate_rate(self,
         unsigned int rxn,
-        double* states) nogil
+        double *states) nogil
 
 
 ctypedef void (*cSetActivation)(cRegulatoryModule,

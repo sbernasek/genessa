@@ -17,7 +17,6 @@ import numpy as np
 from array import array
 from functools import reduce
 from operator import add
-import ctypes
 
 # cython intra-package imports
 from ..kinetics.massaction cimport cMassAction
@@ -349,24 +348,24 @@ cdef class cRates:
             self.transcription.modules_obj.update(states, rxn)
             self.update_rxn_rate(rxn, states, inputs, cumulative)
 
-    cpdef array c_evaluate_rxn_rates(self,
-        np.ndarray[np.float64_t, ndim=1, mode='c'] states,
-        array inputs,
-        np.ndarray[np.float64_t, ndim=1, mode='c'] cumulative):
+    cpdef double[:] c_evaluate_rxn_rates(self,
+        double[::1] states,
+        double[::1] inputs,
+        double[::1] cumulative):
         """
         Evaluates all reaction rates and returns reaction rate vector.
 
         Args:
 
-            states (np.ndarray[double]) - state values (c-contiguous)
+            states (double[:]) - state values (c-contiguous)
 
-            inputs (array[double]) - input values
+            inputs (double[:]) - input values (c-contiguous)
 
-            cumulative (np.ndarray[double]) - integrator values (c-contiguous)
+            cumulative (double[:]) - integrator values (c-contiguous)
 
         Returns:
 
-            rates (array[double]) - reaction rates
+            rates (double[:]) - reaction rates
 
         """
 
@@ -374,12 +373,8 @@ cdef class cRates:
         cdef double rate = 0
         cdef unsigned int rxn_type, key
 
-        # get raw pointer for states and accumulator
-        cdef double* states_ptr = <double*> states.data
-        cdef double* cumulative_ptr = <double*> cumulative.data
-
         # initialize reaction rates as array of zeros
-        cdef array rates = array('d', self.M*[0.])
+        cdef double[:] rates = np.zeros(self.M, dtype=np.float64)
 
         # iterate across reactions
         for rxn in xrange(self.M):
@@ -390,22 +385,22 @@ cdef class cRates:
 
             # evaluate reaction rate
             if rxn_type == 0:
-                rate = self.coupling.c_evaluate_rate(key, states_ptr)
+                rate = self.coupling.c_evaluate_rate(key, &states[0])
             elif rxn_type == 1:
-                rate = self.massaction.c_evaluate_rate(key, states_ptr, inputs)
+                rate = self.massaction.c_evaluate_rate(key, &states[0], &inputs[0])
             elif rxn_type == 2:
-                rate = self.transcription.c_evaluate_rate(key, states_ptr)
+                rate = self.transcription.c_evaluate_rate(key, &states[0])
             elif rxn_type == 3:
-                rate = self.hill.c_evaluate_rate(key, states_ptr, inputs)
+                rate = self.hill.c_evaluate_rate(key, &states[0], &inputs[0])
             elif rxn_type == 4:
-                rate = self.icontrol.c_evaluate_rate(key, cumulative_ptr)
+                rate = self.icontrol.c_evaluate_rate(key, &cumulative[0])
             elif rxn_type == 5:
-                rate = self.pcontrol.c_evaluate_rate(key, states_ptr)
+                rate = self.pcontrol.c_evaluate_rate(key, &states[0])
             else:
                 pass
 
             # store reaction rate
-            rates.data.as_doubles[rxn] = rate
+            rates[rxn] = rate
 
         return rates
 

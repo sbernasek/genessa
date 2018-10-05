@@ -13,25 +13,25 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef bint integrate
     cdef bint null_input
     cdef array rstates
-    cdef unsigned int* rxn_order
-    cdef unsigned int* states
-    cdef double* inputs
-    cdef double* cumulative
+    cdef unsigned int *rxn_order
+    cdef unsigned int *states
+    cdef double *inputs
+    cdef double *cumulative
 
     # methods
     cdef void allocate_memory(self)
 
-    cdef void set_states(self, array x) nogil
+    cdef void set_states(self, unsigned int[:] x) nogil
 
-    cdef void set_inputs(self, array x) nogil
+    cdef void set_inputs(self, double[:] x) nogil
 
-    cdef void set_cumulative(self, array x) nogil
+    cdef void set_cumulative(self, double[:] x) nogil
 
-    cdef void set_rxn_order(self, double* rates)
+    cdef void set_rxn_order(self, double *rates)
 
     cpdef tuple run(self,
-        unsigned int[::1] ic,
-        double[::1] integrator_ic,
+        unsigned int[:] ic,
+        double[:] integrator_ic,
         cSignalType signal,
         double duration=*,
         double dt=*)
@@ -44,11 +44,11 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef void fire_reaction(self,
         unsigned int rxn,
         unsigned int extent,
-        unsigned int* states) nogil
+        unsigned int *states) nogil
 
     cdef void update_cumulative(self,
-        unsigned int* states,
-        double* cumulative,
+        unsigned int *states,
+        double *cumulative,
         double tau) nogil
 
 

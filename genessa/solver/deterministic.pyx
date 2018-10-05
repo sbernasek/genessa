@@ -4,7 +4,6 @@ from cpython.array cimport array
 
 # python external imports
 import numpy as np
-import ctypes
 from copy import deepcopy
 from scipy.integrate import solve_ivp
 from scipy.interpolate import interp1d
@@ -74,24 +73,24 @@ cdef class cDeterministicSystem:
         """ Returns current total reaction rate. """
         return self.R.total_rate
 
-    cpdef array c_evaluate_species_rates(self,
-        np.ndarray states,
-        array inputs,
-        np.ndarray cumulative):
+    cpdef double[:] c_evaluate_species_rates(self,
+        double[::1] states,
+        double[::1] inputs,
+        double[::1] cumulative):
         """
         Evaluate rate of change for all species.
 
         Args:
 
-            states (np.ndarray[double]) - state values
+            states (double[:]) - state values (c-contiguous)
 
-            inputs (array[double]) - input values
+            inputs (double[:]) - input values (c-contiguous)
 
-            cumulative (np.ndarray[double]) - integrator values
+            cumulative (double[:]) - integrator values (c-contiguous)
 
         Returns:
 
-            rates (array[double]) - species rates, e.g. dX/dt
+            rates (double[:]) - species rates, e.g. dX/dt
 
         """
 
@@ -99,17 +98,18 @@ cdef class cDeterministicSystem:
         cdef double rxn_rate
         cdef unsigned int N, index, count, species
         cdef int coefficient
-        cdef array rxn_rates
+        cdef double[:] rxn_rates
 
         # instantiate array of zeros (double length for adding integrator)
-        cdef array rates = array('d', self.N*[0.])
+        #cdef array rates = array('d', self.N*[0.])
+        cdef double[:] rates = np.zeros(self.N, dtype=np.float64)
 
         # evaluate reaction rates
         rxn_rates = self.R.c_evaluate_rxn_rates(states, inputs, cumulative)
 
         # for each reaction
         for rxn in xrange(self.M):
-            rxn_rate = rxn_rates.data.as_doubles[rxn]
+            rxn_rate = rxn_rates[rxn]
             N = self.S.lengths[rxn]
             index = self.S.index[rxn]
 
@@ -117,7 +117,7 @@ cdef class cDeterministicSystem:
             for count in xrange(N):
                 species = self.S.species[index]
                 coefficient = self.S.coefficients[index]
-                rates.data.as_doubles[species] += (coefficient * rxn_rate)
+                rates[species] += (coefficient * rxn_rate)
                 index += 1
 
         return rates
@@ -219,7 +219,7 @@ class DeterministicSimulation:
 
             x (np.ndarray[float]) - state and integrator values, length 2N
 
-            inputs (array[double]) - input signal values, length I
+            inputs (np.ndarray[float]) - input signal values, length I
 
         Returns:
 
@@ -247,7 +247,7 @@ class DeterministicSimulation:
 
         Args:
 
-            ic (np.ndarray) - initial conditions
+            ic (np.ndarray[float]) - initial conditions
 
             signal (cSignalType) - returns signal value(s) at each time
 
@@ -272,14 +272,13 @@ class DeterministicSimulation:
 
         # if no input function, use zeros
         if signal is None:
-            signal = cSignal([0. for _ in range(self.I)])
-
+            signal = cSignal(1, [0. for _ in range(self.I)])
 
         times = np.arange(0, duration, dt)
 
         # run solver
         tspan = (0, duration)
-        dxdt = lambda t, x: self.differentiate(x, signal(t))
+        dxdt = lambda t, x: self.differentiate(x, signal.get_values(t))
         solout = solve_ivp(dxdt, tspan, ic, method, t_eval=times)
 
         # interpolate onto regularly sampled time interval
