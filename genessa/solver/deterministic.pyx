@@ -75,22 +75,21 @@ cdef class cDeterministicSystem:
 
     cpdef double[:] c_evaluate_species_rates(self,
         double[::1] states,
-        double[::1] inputs,
-        double[::1] cumulative):
+        double[::1] inputs):
         """
-        Evaluate rate of change for all species.
+        Evaluate rate of change for all species. States and integrator values are combined into the same c-contiguous memory block.
 
         Args:
 
-            states (double[:]) - state values (c-contiguous)
+            states (double[:]) - state and integrator values, length 2N
 
-            inputs (double[:]) - input values (c-contiguous)
+            inputs (double[:]) - input signal values, length I
 
-            cumulative (double[:]) - integrator values (c-contiguous)
+            Note: both arguments must be c-contiguous
 
         Returns:
 
-            rates (double[:]) - species rates, e.g. dX/dt
+            rates (double[:]) - species rates, e.g. dX/dt, length 2N
 
         """
 
@@ -101,11 +100,12 @@ cdef class cDeterministicSystem:
         cdef double[:] rxn_rates
 
         # instantiate array of zeros (double length for adding integrator)
-        #cdef array rates = array('d', self.N*[0.])
-        cdef double[:] rates = np.zeros(self.N, dtype=np.float64)
+        cdef double[:] rates = np.zeros(2*self.N, dtype=np.float64)
 
         # evaluate reaction rates
-        rxn_rates = self.R.c_evaluate_rxn_rates(states, inputs, cumulative)
+        rxn_rates = self.R.c_evaluate_rxn_rates(states[:self.N],
+                                                inputs,
+                                                states[self.N:])
 
         # for each reaction
         for rxn in xrange(self.M):
@@ -119,6 +119,10 @@ cdef class cDeterministicSystem:
                 coefficient = self.S.coefficients[index]
                 rates[species] += (coefficient * rxn_rate)
                 index += 1
+
+        # set integrator rates
+        for count in xrange(self.N):
+            rates[self.N+count] = states[count]
 
         return rates
 
@@ -217,27 +221,28 @@ class DeterministicSimulation:
 
         Args:
 
-            x (np.ndarray[float]) - state and integrator values, length 2N
+            x (np.ndarray[double]) - state and integrator values, length 2N
 
-            inputs (np.ndarray[float]) - input signal values, length I
+            inputs (np.ndarray[double]) - input signal values, length I
 
         Returns:
 
-            dxdt (np.ndarray[float]) - rate of change for states and integrators, length 2N
+            dxdt (np.ndarray[double]) - rate of change for states and integrators, length 2N
 
         """
 
-        # split states and integrator into separate c-contiguous arrays
-        states = np.ascontiguousarray(x[:self.N])
-        cumulative = np.ascontiguousarray(x[self.N:])
+        # ensure state and integrator values are c-contiguous
+        if not x.data.c_contiguous:
+            x = np.ascontiguousarray(x)
 
-        # evaluate state derivatives
-        dxdt = self.solver.c_evaluate_species_rates(states, inputs, cumulative)
+        # evaluate derivatives
+        dxdt = self.solver.c_evaluate_species_rates(states=x, inputs=inputs)
 
-        return np.hstack((dxdt, cumulative))
+        return dxdt
 
     def solve_ivp(self,
                   ic=None,
+                  integrator_ic=None,
                   signal=None,
                   duration=100,
                   dt=1,
@@ -247,7 +252,9 @@ class DeterministicSimulation:
 
         Args:
 
-            ic (np.ndarray[float]) - initial conditions
+            ic (np.ndarray[double]) - initial conditions
+
+            integrator_ic (np.ndarray[double]) - integrator initialization
 
             signal (cSignalType) - returns signal value(s) at each time
 
@@ -268,26 +275,38 @@ class DeterministicSimulation:
             ic = np.zeros(self.N, dtype=np.float64)
         else:
             ic = ic.astype(np.float64)
-        assert (ic.size==self.N), 'Initial condition has wrong dimensions.'
+        assert (ic.size==self.N), 'Initial Condition is the wrong size.'
+
+        # if no initial integrator condition is provided, assume zeros
+        if integrator_ic is None:
+            integrator_ic = np.zeros(self.N, dtype=np.float64)
+        else:
+            integrator_ic = integrator_ic.astype(np.float64)
+        assert (integrator_ic.size==self.N), 'Integrator IC is the wrong size.'
+
+        # combine initial condition with initial integrator condition
+        ic = np.hstack((ic, integrator_ic))
 
         # if no input function, use zeros
         if signal is None:
-            signal = cSignal(1, [0. for _ in range(self.I)])
+            signal = cSignal()
+            assert self.I == 1, 'Signal dimensions do not match system inputs.'
 
-        times = np.arange(0, duration, dt)
+        # define derivative function
+        dxdt = lambda t, x: self.differentiate(x, signal.get_values(t))
 
         # run solver
-        tspan = (0, duration)
-        dxdt = lambda t, x: self.differentiate(x, signal.get_values(t))
-        solout = solve_ivp(dxdt, tspan, ic, method, t_eval=times)
-
-        # interpolate onto regularly sampled time interval
-        #interpolator = interp1d(solout['t'], solout['y'])
-        #times = np.arange(0, duration, dt)
-        #states = interpolator(times)
-        states = solout['y']
+        t_eval = np.arange(0, duration, dt)
+        t_span = (0, duration)
+        solout = solve_ivp(dxdt,
+                           t_span,
+                           ic,
+                           method,
+                           t_eval=t_eval,
+                           vectorized=False)
 
         # instantiate timeseries
-        timeseries = TimeSeries(times, states.reshape(1, self.N, times.size))
+        states = solout['y'][:self.N].reshape(1, self.N, t_eval.size)
+        timeseries = TimeSeries(t_eval, states)
 
         return timeseries

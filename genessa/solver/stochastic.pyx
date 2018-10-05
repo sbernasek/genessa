@@ -204,9 +204,12 @@ cdef class cStochasticSystem(cDeterministicSystem):
         self.null_input = 0
         if signal is None:
             self.null_input = 1
-            signal = cSignal(1, [0. for _ in range(self.I)] )
-        signal.reset()
-        self.set_inputs(signal.get_values(0))
+            signal = cSignal()
+
+        # set initial input signal values
+        if self.null_input == 0:
+            signal.reset()
+            self.set_inputs(signal.get_values(0))
 
         # initialize all rates and sort order
         self.R.update_all(self.states, self.inputs, self.cumulative)

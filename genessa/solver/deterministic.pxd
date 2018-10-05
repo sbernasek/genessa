@@ -20,5 +20,4 @@ cdef class cDeterministicSystem:
 
     cpdef double[:] c_evaluate_species_rates(self,
         double[::1] states,
-        double[::1] inputs,
-        double[::1] cumulative)
+        double[::1] inputs)

@@ -33,7 +33,7 @@ cdef class cSignal:
             value (float) - constant signal value
 
         """
-        assert self.I==1, 'Too many signal channels specified.'
+        assert self.I==1, 'Incorrect number of signal channels.'
         self.value[0] = value
 
     def __cinit__(self, *args, **kwargs):
