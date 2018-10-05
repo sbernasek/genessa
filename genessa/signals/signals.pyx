@@ -24,38 +24,42 @@ cdef class cSignal:
 
     """
 
-    def __init__(self, I=1, value=0):
+    def __init__(self, value):
         """
         Instantiate a constant signal.
 
         Args:
 
-            I (unsigned int) - number of signal channels (must be 1)
-
             value (float) - constant signal value
 
         """
+        assert self.I==1, 'Too many signal channels specified.'
+        self.value[0] = value
 
-        assert I==1, 'Too many signal channels specified.'
-
-        # populate memory with constant signal values
-        for i in xrange(self.I):
-            self.value[i] = value
-
-    def __cinit__(self, I=1, *args, **kwargs):
+    def __cinit__(self, argument, *args, **kwargs):
         """
         Allocate memory for signal values.
 
+        The shape of the first positioal argument is used to determine the number of signal channels.
+
         Args:
 
-            I (unsigned int) - number of signal channels
+            argument (float or array like) - first positional argument
 
             args: arguments reserved for subclassing
+
             kwargs: keyword arguments reserved for subclassing
 
         """
+
+        # check whether value is a collection (for multi-valued subclasses)
+        try:
+            I = len(argument)
+        except TypeError:
+            I = 1
+
         self.I = I
-        self.value = <double*> PyMem_Malloc(self.I * sizeof(double))
+        self.value = <double*> PyMem_Malloc(I * sizeof(double))
         if not self.value:
             raise MemoryError('Could not allocate memory for signal values.')
 
@@ -107,6 +111,8 @@ cdef class cSignal:
         Returns:
 
             values (np.ndarray[double]) - signal value(s)
+
+        Note: returned values share their memory with the signal.value pointer, and the returned array values will change each time the signal is updated.
 
         """
         self.update(t)
@@ -195,13 +201,11 @@ cdef class cSquarePulse(cSignal):
 
     """
 
-    def __init__(self, I=1, t_on=0, t_off=3, off=0, on=1):
+    def __init__(self, t_on, t_off=3, off=0, on=1):
         """
         Instantiate a single-channel square pulse signal.
 
         Args:
-
-            I (unsigned int) - number of signal channels (must be 1)
 
             t_on (double) - pulse onset time
 
@@ -212,7 +216,7 @@ cdef class cSquarePulse(cSignal):
             on (double) - signal on value
 
         """
-        super().__init__(I, off)
+        super().__init__(off)
         self.t_on = t_on
         self.t_off = t_off
         self.off = off
@@ -241,6 +245,63 @@ cdef class cSquarePulse(cSignal):
             self.set_value(&self.off)
 
 
+cdef class cSquareWave(cSignal):
+    """
+    Class defines a single-channel square wave signal.
+
+    Attributes:
+
+        period (double) - signal oscillation period
+
+        off (double) - signal off value
+
+        on (double) - signal on value
+
+    Inherited Attributes:
+
+        I (unsigned int) - number of signal channels (must be 1)
+
+        value (double*) - signal value(s)
+
+    """
+
+    def __init__(self, period, off=0, on=1):
+        """
+        Instantiate a single-channel square wave signal. Note that all channels must follow the same oscillation frequency.
+
+        Args:
+
+            period (double) - signal oscillation period
+
+            off (double) - signal off value
+
+            on (double) - signal on value
+
+        """
+        super().__init__(off)
+        self.period = period
+        self.off = off
+        self.on = on
+
+    cdef void reset(self) nogil:
+        """ Reset signal to off value. """
+        self.set_value(&self.off)
+
+    cdef void update(self, double t) nogil:
+        """
+        Update signal value for specified time.
+
+        Args:
+
+            t (double) - time
+
+        """
+        if (t // (self.period/2)) % 2 == 0:
+            self.set_value(&self.off)
+        else:
+            self.set_value(&self.on)
+
+
 cdef class cMultiPulse(cSignal):
     """
     Class defines a multi channel square pulse signal.
@@ -263,13 +324,11 @@ cdef class cMultiPulse(cSignal):
 
     """
 
-    def __init__(self, I, t_on=None, t_off=None, off=None, on=None):
+    def __init__(self, t_on, t_off=None, off=None, on=None):
         """
         Instantiate a multi-channel square pulse signal.
 
         Args:
-
-            I (unsigned int) - number of signal channels
 
             t_on (array like [float]) - pulse onset time(s)
 
@@ -282,14 +341,12 @@ cdef class cMultiPulse(cSignal):
         """
 
         # set defaults
-        if t_on is None:
-            t_on = np.zeros(I, dtype=np.float64)
         if t_off is None:
-            t_off = np.ones(I, dtype=np.float64)
+            t_off = np.ones(self.I, dtype=np.float64)
         if off is None:
-            off = np.zeros(I, dtype=np.float64)
+            off = np.zeros(self.I, dtype=np.float64)
         if on is None:
-            on = np.ones(I, dtype=np.float64)
+            on = np.ones(self.I, dtype=np.float64)
 
         # populate memory with constant signal values
         for i in xrange(self.I):
@@ -301,28 +358,28 @@ cdef class cMultiPulse(cSignal):
         # set values to off state
         self.reset()
 
-    def __cinit__(self, I=1, *args, **kwargs):
+    def __cinit__(self, t_on, *args, **kwargs):
         """
         Allocate memory for signal values.
 
         Args:
 
-            I (unsigned int) - number of signal channels
+            t_on (array like [float]) - pulse onset time(s)
 
         """
-        self.t_on = <double*> PyMem_Malloc(I * sizeof(double))
+        self.t_on = <double*> PyMem_Malloc(self.I * sizeof(double))
         if not self.t_on:
             raise MemoryError('Could not allocate memory for on-time values.')
 
-        self.t_off = <double*> PyMem_Malloc(I * sizeof(double))
+        self.t_off = <double*> PyMem_Malloc(self.I * sizeof(double))
         if not self.t_off:
             raise MemoryError('Could not allocate memory for off-time values.')
 
-        self.off = <double*> PyMem_Malloc(I * sizeof(double))
+        self.off = <double*> PyMem_Malloc(self.I * sizeof(double))
         if not self.off:
             raise MemoryError('Could not allocate memory for off values.')
 
-        self.on = <double*> PyMem_Malloc(I * sizeof(double))
+        self.on = <double*> PyMem_Malloc(self.I * sizeof(double))
         if not self.on:
             raise MemoryError('Could not allocate memory for on values.')
 
@@ -344,6 +401,8 @@ cdef class cMultiPulse(cSignal):
         Returns:
 
             values (np.ndarray[double]) - signal value(s)
+
+        Note: returned values share their memory with the signal.value pointer, and the returned array values will change each time the signal is updated.
 
         """
         return self.get_values(t)
@@ -373,62 +432,3 @@ cdef class cMultiPulse(cSignal):
                     self.value[index] = self.off[index]
             else:
                 self.value[index] = self.off[index]
-
-
-cdef class cSquareWave(cSignal):
-    """
-    Class defines a single-channel square wave signal.
-
-    Attributes:
-
-        period (double) - signal oscillation period
-
-        off (double) - signal off value
-
-        on (double) - signal on value
-
-    Inherited Attributes:
-
-        I (unsigned int) - number of signal channels (must be 1)
-
-        value (double*) - signal value(s)
-
-    """
-
-    def __init__(self, I=1, period=1, off=0, on=1):
-        """
-        Instantiate a single-channel square wave signal. Note that all channels must follow the same oscillation frequency.
-
-        Args:
-
-            I (unsigned int) - number of signal channels (must be 1)
-
-            period (double) - signal oscillation period
-
-            off (double) - signal off value
-
-            on (double) - signal on value
-
-        """
-        super().__init__(I, off)
-        self.period = period
-        self.off = off
-        self.on = on
-
-    cdef void reset(self) nogil:
-        """ Reset signal to off value. """
-        self.set_value(&self.off)
-
-    cdef void update(self, double t) nogil:
-        """
-        Update signal value for specified time.
-
-        Args:
-
-            t (double) - time
-
-        """
-        if (t // (self.period/2)) % 2 == 0:
-            self.set_value(&self.off)
-        else:
-            self.set_value(&self.on)

@@ -24,6 +24,13 @@ cdef class cSquarePulse(cSignal):
     cdef double on, off
 
 
+cdef class cSquareWave(cSignal):
+
+    # attributes
+    cdef double period
+    cdef double on, off
+
+
 cdef class cMultiPulse(cSignal):
 
     # attributes
@@ -33,15 +40,8 @@ cdef class cMultiPulse(cSignal):
     cdef double *off
 
 
-cdef class cSquareWave(cSignal):
-
-    # attributes
-    cdef double period
-    cdef double on, off
-
-
 ctypedef fused cSignalType:
     cSignal
     cSquarePulse
-    cMultiPulse
     cSquareWave
+    cMultiPulse
