@@ -24,7 +24,7 @@ cdef class cSignal:
 
     """
 
-    def __init__(self, value):
+    def __init__(self, value=0):
         """
         Instantiate a constant signal.
 
@@ -36,21 +36,25 @@ cdef class cSignal:
         assert self.I==1, 'Too many signal channels specified.'
         self.value[0] = value
 
-    def __cinit__(self, argument, *args, **kwargs):
+    def __cinit__(self, *args, **kwargs):
         """
         Allocate memory for signal values.
 
-        The shape of the first positioal argument is used to determine the number of signal channels.
+        The shape of the first non-null argument is used to determine the number of signal channels.
 
         Args:
-
-            argument (float or array like) - first positional argument
 
             args: arguments reserved for subclassing
 
             kwargs: keyword arguments reserved for subclassing
 
         """
+
+        # get first non-null argument
+        if len(args) > 0:
+            argument = args[0]
+        else:
+            argument = [v for k,v in kwargs.items() if v is not None][0]
 
         # check whether value is a collection (for multi-valued subclasses)
         try:
@@ -201,7 +205,7 @@ cdef class cSquarePulse(cSignal):
 
     """
 
-    def __init__(self, t_on, t_off=3, off=0, on=1):
+    def __init__(self, t_on=0, t_off=3, off=0, on=1):
         """
         Instantiate a single-channel square pulse signal.
 
@@ -265,7 +269,7 @@ cdef class cSquareWave(cSignal):
 
     """
 
-    def __init__(self, period, off=0, on=1):
+    def __init__(self, period=1, off=0, on=1):
         """
         Instantiate a single-channel square wave signal. Note that all channels must follow the same oscillation frequency.
 
