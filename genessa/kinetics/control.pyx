@@ -252,9 +252,15 @@ class SumReaction:
                  propensity,
                  k=1,
                  rxn_type=None,
-                 parameters=None):
+                 parameters=None,
+                 labels=None):
 
         self.rxn_type = rxn_type
+
+        # assign labels
+        if labels is None:
+            labels = {}
+        self.labels = labels
 
         # compile stoichiometry as a vector of coefficients
         self.stoichiometry = np.array(stoichiometry, dtype=np.int64)

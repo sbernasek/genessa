@@ -83,7 +83,7 @@ class LinearCell(Cell):
                         gene,
                         activator,
                         k=1,
-                        **kwargs):
+                        labels=None):
         """
         Add transcript synthesis reaction.
 
@@ -95,7 +95,7 @@ class LinearCell(Cell):
 
             k (float) - activation rate constant
 
-            kwargs: keyword arguments for reaction
+            labels (dict) - additional labels for reaction
 
         """
 
@@ -122,63 +122,8 @@ class LinearCell(Cell):
                  k=k,
                  rxn_type=gene+' activation',
                  atp_sensitive=False,
-                 ribosome_sensitive=False)
-
-        # add reaction
-        self.reactions.append(rxn)
-        self.update()
-
-      def add_linear_feedback(self,
-                            actuator,
-                            target,
-                            mode='protein',
-                            k=1.,
-                            atp_sensitive=True,
-                            ribosome_sensitive=True):
-        """
-        Add linear feedback term.
-
-        Args:
-
-            actuator (str) - actuating substrate
-
-            target (float) - target gene
-
-            mode (str) - 'protein', 'transcript', or 'gene'
-
-            k (float) - maximum degradation rate
-
-            atp_sensitive (bool) - scale rate with metabolism
-
-            ribosome_sensitive (bool) - scale rate with ribosomes
-
-            kwargs: keyword arguments for MassAction instantiation
-
-        """
-
-        # define stoichiometry
-        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
-        if mode == 'protein':
-            stoichiometry[self.proteins[target]] = -1
-        elif mode == 'transcript':
-            stoichiometry[self.transcripts[target]] = -1
-        elif mode == 'gene':
-            stoichiometry[self.genes[target]] = -1
-
-        # define propensity
-        assert actuator in self.proteins.keys(), 'Actuator not recognized.'
-        propensity = np.zeros(self.nodes.size, dtype=np.int64)
-        propensity[self.proteins[actuator]] = 1
-
-        # define reaction
-        rxn = MassAction(stoichiometry,
-                         propensity,
-                         input_dependence=None,
-                         k=k,
-                         rxn_type=mode+'  feedback',
-                         atp_sensitive=atp_sensitive,
-                         ribosome_sensitive=ribosome_sensitive,
-                         **kwargs)
+                 ribosome_sensitive=False,
+                 labels=labels)
 
         # add reaction
         self.reactions.append(rxn)

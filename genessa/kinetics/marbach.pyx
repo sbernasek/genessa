@@ -643,9 +643,15 @@ class Transcription:
                  perturbed=False,
                  input_dependence=None,
                  rxn_type=None,
-                 parameters=None):
+                 parameters=None,
+                 labels=None):
 
         self.rxn_type = rxn_type
+
+        # assign labels
+        if labels is None:
+            labels = {}
+        self.labels = labels
 
         # compile stoichiometry as a vector of coefficients
         if stoichiometry is None:

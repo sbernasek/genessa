@@ -453,7 +453,8 @@ class Coupling:
                  w=1,
                  repressors=None,
                  rxn_type='coupling',
-                 parameters=None):
+                 parameters=None,
+                 labels=None):
         """
         Class describes a single coupling pathway.
 
@@ -473,9 +474,16 @@ class Coupling:
 
             rxn_type (str) - name of reaction
 
+            labels (dict) - additional labels
+
         """
 
         self.rxn_type = rxn_type
+
+        # assign labels
+        if labels is None:
+            labels = {}
+        self.labels = labels
 
         # define stoichiometry
         if stoichiometry is None:

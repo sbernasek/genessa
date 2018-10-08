@@ -152,7 +152,8 @@ class MassAction:
                  temperature_sensitive=True,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
-                 parameters=None):
+                 parameters=None,
+                 labels=None):
         """
         Class describes a single kinetic pathway.
 
@@ -174,9 +175,16 @@ class MassAction:
 
             ribosome_sensitive (bool) - if True, rate scales with ribosomes
 
+            labels (dict) - additional labels for reaction instance
+
         """
 
         self.rxn_type = rxn_type
+
+        # assign labels
+        if labels is None:
+            labels = {}
+        self.labels = labels
 
         # compile stoichiometry as a vector of coefficients
         if stoichiometry is None:

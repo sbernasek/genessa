@@ -322,7 +322,8 @@ class Cell(Network):
                                    actuator,
                                    target,
                                    k=1.,
-                                   Kd=1.):
+                                   Kd=1.,
+                                   labels=None):
         """
         Add transcript degradation term based on Michaelis Menten kinetics.
 
@@ -335,6 +336,8 @@ class Cell(Network):
             k (float) - maximum degradation rate
 
             Kd (float) - substrate concentration for half maximal rate
+
+            labels (dict) - additional labels for reaction
 
         """
 
@@ -360,7 +363,8 @@ class Cell(Network):
                    input_dependence,
                    k=k,
                    k_m=Kd,
-                   rxn_type=target+' transcript deg.')
+                   rxn_type=target+' transcript deg.',
+                   labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
@@ -371,7 +375,8 @@ class Cell(Network):
                                 target,
                                 k=1.,
                                 Kd=1.,
-                                modulation=None):
+                                modulation=None,
+                                labels=None):
         """
         Add protein degradation term based on Michaelis Menten kinetics.
 
@@ -386,6 +391,8 @@ class Cell(Network):
             Kd (float) - substrate concentration for half maximal rate
 
             modulation (tuple) - (input_dimension, modulation_factor) pair
+
+            labels (dict) - additional labels for reaction
 
         """
 
@@ -419,7 +426,8 @@ class Cell(Network):
                    k=k,
                    k_m=Kd,
                    rxn_type=rxn_name,
-                   rate_modifier=rate_modifier)
+                   rate_modifier=rate_modifier,
+                   labels=labels)
 
         # add reaction
         self.reactions.append(rxn)

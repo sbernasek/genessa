@@ -414,7 +414,8 @@ class Hill:
                  temperature_sensitive=False,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
-                 parameters=None):
+                 parameters=None,
+                 labels=None):
         """
 
         Class describes a single hill-kinetic pathway.
@@ -447,9 +448,17 @@ class Hill:
 
             ribosome_sensitive (bool) - if True, scale rate with ribosomes
 
+            labels (dict) - additional labels
+
         """
 
         self.rxn_type = rxn_type
+
+        # assign labels
+        if labels is None:
+            labels = {}
+        self.labels = labels
+
         self.zero_order = False
 
         # define stoichiometry
@@ -499,7 +508,6 @@ class Hill:
             self.repressors = []
         else:
             self.repressors = repressors
-        self.num_repressors = len(self.repressors)
 
         # set rate modifier
         if rate_modifier is None:
@@ -520,6 +528,11 @@ class Hill:
         self.temperature_sensitive = temperature_sensitive
         self.atp_sensitive = atp_sensitive
         self.ribosome_sensitive = ribosome_sensitive
+
+    @property
+    def num_repressors(self):
+        """ Number of repressors. """
+        return len(self.repressors)
 
     def shift(self, shift):
         """
@@ -581,7 +594,6 @@ class Hill:
 
         """
         self.repressors.append(repressor)
-        self.num_repressors += 1
 
     def evaluate_rate(self, states, input_state, **kwargs):
         """
@@ -621,7 +633,8 @@ class Repressor:
                  input_dependence=None,
                  k_m=1,
                  n=1,
-                 parameters=None):
+                 parameters=None,
+                 labels=None):
         """
         Class defines single instance of competitive enzyme occupancy.
 
@@ -635,7 +648,14 @@ class Repressor:
 
             n (float) - hill coefficient
 
+            labels (dict) - additional labels
+
         """
+
+        # assign labels
+        if labels is None:
+            labels = {}
+        self.labels = labels
 
         # define rate law parameters
         if propensity is None:

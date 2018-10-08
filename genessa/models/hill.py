@@ -41,7 +41,7 @@ class HillCell(Cell):
                           k_m=1,
                           n=1,
                           baseline=0.,
-                          **kwargs):
+                          labels=None):
         """
         Add transcript synthesis reaction.
 
@@ -61,7 +61,7 @@ class HillCell(Cell):
 
             baseline (float) - baseline transcription rate
 
-            kwargs: keyword arguments for reaction
+            labels (dict) - additional labels for reaction
 
         """
 
@@ -98,7 +98,7 @@ class HillCell(Cell):
                    rxn_type=gene+' transcription',
                    atp_sensitive=True,
                    ribosome_sensitive=False,
-                   **kwargs)
+                   labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
@@ -108,7 +108,8 @@ class HillCell(Cell):
                                       actuators,
                                       target,
                                       k_m=1,
-                                      n=1):
+                                      n=1,
+                                      labels=None):
         """
         Add transcriptional repressor.
 
@@ -121,6 +122,8 @@ class HillCell(Cell):
             k_m (float) - michaelis menten constant
 
             n (float) - hill coefficient
+
+            labels (dict) - additional labels for repressor
 
         """
 
@@ -145,7 +148,8 @@ class HillCell(Cell):
         repressor = Repressor(propensity=propensity,
                               input_dependence=input_dependence,
                               k_m=k_m,
-                              n=n)
+                              n=n,
+                              labels=labels)
 
         # add repressor
         for rxn in self.reactions:

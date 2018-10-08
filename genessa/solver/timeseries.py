@@ -12,9 +12,9 @@ class TimeSeries():
         """
         Args:
 
-            times (np array) - 1xt vector of timepoints
+            times (np.ndarray) - 1xt vector of timepoints
 
-            states (np array) - num_trials x N x t array of state values
+            states (np.ndarray) - num_trials x N x t array of state values
 
         """
         self.t = times
@@ -123,7 +123,7 @@ class TimeSeries():
 
         Returns:
 
-            trajectory (np array) - time series for specified percentile
+            trajectory (np.ndarray) - time series for specified percentile
 
         """
         trajectory = np.percentile(self.states[:, dim, :], q=percentile, axis=0)
@@ -268,7 +268,7 @@ class GaussianModel(TimeSeries):
 
         Returns:
 
-            index (np array of int) - index of of timepoint
+            index (np.ndarray of int) - index of of timepoint
 
             time (float) - time at which value occurs
 
@@ -299,7 +299,7 @@ class GaussianModel(TimeSeries):
 
         Returns:
 
-            trajectory (np array) - time series for specified percentile
+            trajectory (np.ndarray) - time series for specified percentile
 
         """
         trajectory = self.norm.ppf(percentile/100)
@@ -412,7 +412,10 @@ class GaussianModel(TimeSeries):
             dev_states -= steady_state
 
         # construct new model
-        model = GaussianModel(t=self.t, mean=dev_mean, var=self.var, states=dev_states)
+        model = super().__class__(t=self.t,
+                                  mean=dev_mean,
+                                  var=self.var,
+                                  states=dev_states)
 
         return model
 

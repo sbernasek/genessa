@@ -18,15 +18,25 @@ class TwoStateCell(Cell):
 
     Inherited Attributes:
 
-        nodes (np.ndarray) - node indices
-
-        reactions (list) - translation, mRNA decay, and protein decay reactions
-
         transcripts (dict) - {name: node_id} pairs
 
         proteins (dict) - {name: node_id} pairs
 
         phosphorylated (dict) - {name: node_id} pairs
+
+        nodes (np.ndarray) - vector of node indices
+
+        node_key (dict) - {state dimension: node id} pairs
+
+        reactions (list) - list of reaction objects
+
+        stoichiometry (np.ndarray) - stoichiometric coefficients, (N,M)
+
+        N (int) - number of nodes
+
+        M (int) - number of reactions
+
+        I (int) - number of inputs
 
     """
     def __init__(self,
@@ -79,7 +89,7 @@ class TwoStateCell(Cell):
                         gene,
                         activator,
                         k=1,
-                        **kwargs):
+                        labels=None):
         """
         Add transcript synthesis reaction.
 
@@ -91,7 +101,7 @@ class TwoStateCell(Cell):
 
             k (float) - activation rate constant
 
-            kwargs: keyword arguments for reaction
+            labels (dict) - additional labels for reaction
 
         """
 
@@ -120,7 +130,8 @@ class TwoStateCell(Cell):
                  k=k,
                  rxn_type=gene+' activation',
                  atp_sensitive=False,
-                 ribosome_sensitive=False)
+                 ribosome_sensitive=False,
+                 labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
@@ -131,7 +142,8 @@ class TwoStateCell(Cell):
                                         target,
                                         k=1.,
                                         atp_sensitive=True,
-                                        ribosome_sensitive=True):
+                                        ribosome_sensitive=True,
+                                        labels=None):
         """
         Add transcriptional repressor.
 
@@ -147,7 +159,7 @@ class TwoStateCell(Cell):
 
             ribosome_sensitive (bool) - scale rate with ribosomes
 
-            kwargs: keyword arguments for MassAction instantiation
+            labels (dict) - additional labels for reaction
 
         """
 
@@ -176,7 +188,8 @@ class TwoStateCell(Cell):
                  k=k,
                  rxn_type=gene+' repression',
                  atp_sensitive=atp_sensitive,
-                 ribosome_sensitive=ribosome_sensitive)
+                 ribosome_sensitive=ribosome_sensitive,
+                 labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
