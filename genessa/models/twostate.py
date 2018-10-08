@@ -6,7 +6,7 @@ from .cells import Cell
 from .genes import TwoStateGene
 
 
-class TwoStateModel(Cell):
+class TwoStateCell(Cell):
     """
     Class defines a cell with one or more protein coding genes. Transcription is based on a twostate model.
 

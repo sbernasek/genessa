@@ -5,7 +5,7 @@ from ..kinetics.marbach import Transcription
 from .cells import Cell
 
 
-class MarbachModel(Cell):
+class MarbachCell(Cell):
     """
     Class defines a cell with one or more protein coding genes. Transcriptional kinetics are dictated by the Marbach model.
 

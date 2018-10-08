@@ -6,7 +6,7 @@ from .cells import Cell
 from .genes import LinearGene
 
 
-class LinearModel(Cell):
+class LinearCell(Cell):
     """
     Class defines a cell with one or more protein coding genes. All reaction rates are based on linear propensity functions.
 

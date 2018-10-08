@@ -5,7 +5,7 @@ from ..kinetics.hill import Hill, Repressor
 from .cells import Cell
 
 
-class HillModel(Cell):
+class HillCell(Cell):
     """
     Class defines a cell with one or more protein coding genes.
 
