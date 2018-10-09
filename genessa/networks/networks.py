@@ -43,7 +43,6 @@ class Network:
 
         # initialize network species
         self.nodes = np.arange(0, N)
-        self.node_key = {n: n for n in range(N)}
 
         # initialize reaction list
         if reactions is None:
