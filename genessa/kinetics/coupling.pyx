@@ -13,6 +13,9 @@ from ..utilities import name_parameter
 from .coupling cimport cSDRepressor, cCoupling, cRxnMap
 from .base cimport cSpeciesDependent
 
+# python intra-package imports
+from .base import Reaction
+
 
 cdef class cSDRepressor(cSpeciesDependent):
 
@@ -63,8 +66,8 @@ cdef class cSDRepressor(cSpeciesDependent):
         n = np.array([rxn.n for rxn in reps], dtype=np.float64)
 
         # get species dependence
-        species_ind = np.cumsum([0]+[rxn.num_active_substrates for rxn in reps]).astype(np.uint32)
-        species = np.hstack([rxn.active_substrates for rxn in reps]).astype(np.uint32)
+        species_ind = np.cumsum([0]+[rxn.num_active_species for rxn in reps]).astype(np.uint32)
+        species = np.hstack([rxn.active_species for rxn in reps]).astype(np.uint32)
         species_dependence = np.hstack([rxn._propensity for rxn in reps])
 
         return cSDRepressor(M, k_m, n, species_ind, species, species_dependence, rxn_map)
@@ -443,18 +446,20 @@ cdef class cRxnMap:
 #=============================== PYTHON CODE ==================================
 
 
-class Coupling:
+class Coupling(Reaction):
 
     def __init__(self,
-                 stoichiometry=None,
+                 stoichiometry,
                  propensity=None,
                  k=1,
                  a=1,
                  w=1,
                  repressors=None,
-                 rxn_type='coupling',
+                 temperature_sensitive=True,
+                 atp_sensitive=False,
+                 ribosome_sensitive=False,
                  parameters=None,
-                 labels=None):
+                 labels={}):
         """
         Class describes a single coupling pathway.
 
@@ -472,68 +477,56 @@ class Coupling:
 
             repressors (list) - list of repressor objects
 
-            rxn_type (str) - name of reaction
+            temperature_sensitive (bool) - if True, rate scales with temp
+
+            atp_sensitive (bool) - if True, rate scales with metabolism
+
+            ribosome_sensitive (bool) - if True, rate scales with ribosomes
 
             labels (dict) - additional labels
 
         """
 
-        self.rxn_type = rxn_type
+        # call Reaction instantiation
+        super().__init__(stoichiometry,
+                         propensity,
+                         temperature_sensitive=temperature_sensitive,
+                         atp_sensitive=atp_sensitive,
+                         ribosome_sensitive=ribosome_sensitive,
+                         labels=labels)
 
-        # assign labels
-        if labels is None:
-            labels = {}
-        self.labels = labels
-
-        # define stoichiometry
-        if stoichiometry is None:
-            stoichiometry = [0]
-        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
-
-        # define input dependence (not used)
-        self.input_dependence = np.zeros(1, dtype=np.int64)
-
-        # define rate law parameters
-        if propensity is None:
-            propensity = np.zeros(len(stoichiometry))
-        self.propensity = np.array(propensity, dtype=np.float64)
+        # add repressors
+        if repressors is None:
+            repressors = []
+        self.repressors = repressors
 
         # set parameters
         if parameters is None:
             parameters = {}
         self.parameters = parameters
 
+        # define transcription rate constant
         k_value, k_name = name_parameter(k, 'k')
         if 'k' not in self.parameters.keys():
             self.parameters['k'] = k_name
         self.k = np.array([k_value], dtype=float)
 
+        # define coupling strength
         a_value, a_name = name_parameter(a, 'a')
         if 'a' not in self.parameters.keys():
             self.parameters['a'] = a_name
         self.a = a_value
 
+        # define edge weight
         w_value, w_name = name_parameter(w, 'w')
         if 'w' not in self.parameters.keys():
             self.parameters['w'] = w_name
         self.w = w_value
 
-        # add repressors
-        if repressors is None:
-            self.repressors = []
-        else:
-            self.repressors = repressors
-        self.num_repressors = len(self.repressors)
-
-        # identify participating substrates
-        self.active_species = np.where(self.propensity != 0)[0]
-        self._propensity = self.propensity[self.active_species]
-        self.num_active_species = self.active_species.size
-
-        # assign reaction rate sensitivities
-        self.temperature_sensitive = True
-        self.atp_sensitive = False
-        self.ribosome_sensitive = False
+    @property
+    def num_repressors(self):
+        """ Number of repressors. """
+        return len(self.repressors)
 
     def shift(self, shift):
         """
@@ -561,7 +554,10 @@ class Coupling:
                   w=self.w,
                   parameter_names=self.parameter_names,
                   repressors=repressors,
-                  rxn_type=self.rxn_type)
+                  temperature_sensitive=self.temperature_sensitive,
+                  atp_sensitive=self.atp_sensitive,
+                  ribosome_sensitive=self.ribosome_sensitive,
+                  labels=self.labels)
 
         return Coupling(s, p, **kw)
 
@@ -569,11 +565,12 @@ class Coupling:
         """
         Adds repressor to reaction.
 
-        Parameters:
-            repressor (EnzymaticRepressor object) - repressor to be added to enzymatic reaction
+        Args:
+
+            repressor (Repressor)
+
         """
         self.repressors.append(repressor)
-        self.num_repressors += 1
 
     def evaluate_rate(self, states, input_state, **kwargs):
         """

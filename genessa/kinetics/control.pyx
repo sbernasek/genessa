@@ -13,6 +13,9 @@ from ..utilities import name_parameter
 from .base cimport cSpeciesDependent
 from .control cimport cPController, cIController
 
+# python intra-package imports
+from .base import Reaction
+
 
 cdef class cPController(cSpeciesDependent):
 
@@ -245,29 +248,25 @@ cdef class cIController(cSpeciesDependent):
 #=============================== PYTHON CODE ==================================
 
 
-class SumReaction:
+class SumReaction(Reaction):
 
     def __init__(self,
                  stoichiometry,
                  propensity,
                  k=1,
-                 rxn_type=None,
+                 temperature_sensitive=True,
+                 atp_sensitive=False,
+                 ribosome_sensitive=False,
                  parameters=None,
-                 labels=None):
+                 labels={}):
 
-        self.rxn_type = rxn_type
-
-        # assign labels
-        if labels is None:
-            labels = {}
-        self.labels = labels
-
-        # compile stoichiometry as a vector of coefficients
-        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
-
-        # compile propensity as a vector of coefficients
-        self.propensity = np.array(propensity, dtype=np.int64)
-        self.input_dependence = np.zeros(1, dtype=np.int64)
+        # call Reaction instantiation
+        super().__init__(stoichiometry,
+                         propensity,
+                         temperature_sensitive=temperature_sensitive,
+                         atp_sensitive=atp_sensitive,
+                         ribosome_sensitive=ribosome_sensitive,
+                         labels=labels)
 
         # set parameters
         if parameters is None:
@@ -277,16 +276,6 @@ class SumReaction:
         if 'k' not in self.parameters.keys():
             self.parameters['k'] = k_name
         self.k = np.array([k_value], dtype=float)
-
-        # define active species
-        self.active_species = np.where(self.propensity != 0)[0]
-        self.num_active_species = self.active_species.size
-        self._propensity = self.propensity[self.active_species]
-
-        # assign reaction rate sensitivities
-        self.temperature_sensitive = True
-        self.atp_sensitive = False
-        self.ribosome_sensitive = False
 
     def shift(self, shift):
         """
@@ -305,9 +294,12 @@ class SumReaction:
         s = np.hstack((np.zeros(shift, dtype=int), self.stoichiometry))
         p = np.hstack((np.zeros(shift, dtype=int), self.propensity))
         kw = dict(k=self.k[0],
-                  rxn_type=self.rxn_type,
-                  parameters=self.parameters)
-        rxn = SumReaction(s, p, **kw)
+                  temperature_sensitive=self.temperature_sensitive,
+                  atp_sensitive=self.atp_sensitive,
+                  ribosome_sensitive=self.ribosome_sensitive,
+                  parameters=self.parameters,
+                  labels=self.labels)
+        rxn = self.__class__(s, p, **kw)
         return rxn
 
     def evaluate_rate(self, states, input_value=0, discrete=True):

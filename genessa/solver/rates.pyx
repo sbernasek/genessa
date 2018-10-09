@@ -743,7 +743,7 @@ class Rates:
             # store index of repressor i whose occupancy depends on state s
             repressors = reduce(add, [rxn.repressors for rxn in rxns])
             for i, repressor in enumerate(repressors):
-                for s in repressor.active_substrates:
+                for s in repressor.active_species:
                     adict[s].append(i)
 
         return adict
@@ -796,7 +796,7 @@ class Rates:
             rxn_type = rxn.__class__.__name__
             if rxn_type in ('Hill', 'Coupling'):
                 for repressor in rxn.repressors:
-                    for s in repressor.active_substrates:
+                    for s in repressor.active_species:
                         adict[s].append(i)
 
             # store index of reaction i whose transcription depends on state s

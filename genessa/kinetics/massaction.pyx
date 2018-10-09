@@ -15,6 +15,9 @@ from ..utilities import name_parameter
 from .base cimport cInputDependent
 from .massaction cimport cMassAction
 
+# python intra-package imports
+from .base import Reaction
+
 
 cdef class cMassAction(cInputDependent):
     """
@@ -138,22 +141,22 @@ cdef class cMassAction(cInputDependent):
 
 #============================ PYTHON CODE ====================================
 
-class MassAction:
+
+class MassAction(Reaction):
     """
     Class describes a single mass action kinetic pathway.
     """
 
     def __init__(self,
-                 stoichiometry=None,
+                 stoichiometry,
                  propensity=None,
                  input_dependence=None,
                  k=1,
-                 rxn_type=None,
                  temperature_sensitive=True,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
                  parameters=None,
-                 labels=None):
+                 labels={}):
         """
         Class describes a single kinetic pathway.
 
@@ -167,43 +170,29 @@ class MassAction:
 
             k (float) - mass-action reaction rate constant
 
-            rxn_type (str) - type of reaction
-
             temperature_sensitive (bool) - if True, rate scales with temp
 
             atp_sensitive (bool) - if True, rate scales with metabolism
 
             ribosome_sensitive (bool) - if True, rate scales with ribosomes
 
-            labels (dict) - additional labels for reaction instance
+            labels (dict) - additional labels
 
         """
 
-        self.rxn_type = rxn_type
-
-        # assign labels
-        if labels is None:
-            labels = {}
-        self.labels = labels
-
-        # compile stoichiometry as a vector of coefficients
-        if stoichiometry is None:
-            stoichiometry = [0]
-        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
-
         # compile propensity as a vector of coefficients
         if propensity is None:
-            self.propensity = np.array([-s if s < 0 else 0 for s in self.stoichiometry], dtype=np.int64)
-        else:
-            self.propensity = np.array(propensity, dtype=np.int64)
+            coeffs = [-s if s < 0 else 0 for s in stoichiometry]
+            propensity = np.array(coeffs, dtype=np.float64)
 
-        # convert input dependence to array
-        if type(input_dependence) == int:
-            input_dependence = [input_dependence]
-        if input_dependence is not None:
-            self.input_dependence = np.array(input_dependence, dtype=np.int64)
-        else:
-            self.input_dependence = np.zeros(1, dtype=np.int64)
+        # call Reaction instantiation
+        super().__init__(stoichiometry,
+                         propensity,
+                         input_dependence,
+                         temperature_sensitive=temperature_sensitive,
+                         atp_sensitive=atp_sensitive,
+                         ribosome_sensitive=ribosome_sensitive,
+                         labels=labels)
 
         # set reaction parameters
         if parameters is None:
@@ -213,26 +202,6 @@ class MassAction:
         if 'k' not in self.parameters.keys():
             self.parameters['k'] = k_name
         self.k = np.array([k_value], dtype=float)
-
-        # define active species and inputs
-        self.active_species = np.where(self.propensity != 0)[0]
-        self.active_inputs = np.where(self.input_dependence != 0)[0]
-        self.num_active_species = self.active_species.size
-        self.num_active_inputs = self.active_inputs.size
-
-        # predefine active species mask
-        self._propensity = self.propensity[self.active_species]
-        self._input_dependence = self.input_dependence[self.active_inputs]
-
-        # if kinetics are zeroth order, raise flag to skip rate computation
-        self.zero_order = False
-        if self.propensity.sum() == 0 and self.input_dependence is None:
-            self.zero_order = True
-
-        # assign reaction rate sensitivities
-        self.temperature_sensitive = temperature_sensitive
-        self.atp_sensitive = atp_sensitive
-        self.ribosome_sensitive = ribosome_sensitive
 
     def shift(self, shift):
         """
@@ -254,10 +223,13 @@ class MassAction:
         i = self.input_dependence
 
         kw = dict(k=self.k[0],
-                  rxn_type=self.rxn_type,
-                  parameters=self.parameters)
+                  temperature_sensitive=self.temperature_sensitive,
+                  atp_sensitive=self.atp_sensitive,
+                  ribosome_sensitive=self.ribosome_sensitive,
+                  parameters=self.parameters,
+                  labels=self.labels)
 
-        return MassAction(s, p, i, **kw)
+        return self.__class__(s, p, i, **kw)
 
     @staticmethod
     def _get_activities(states, propensities):
@@ -297,82 +269,5 @@ class MassAction:
             rate = self.k * reduce(mul, input_state**self.input_dependence)
         else:
             rate = self.k * reduce(mul, activities) * reduce(mul, input_state**self.input_dependence)
-
-        return rate
-
-    def get_propensity_coefficients(self, external_input=False):
-        """
-        Need to generalize and fix this POS.
-        """
-
-        if external_input is False:
-            propensity = self.propensity
-        else:
-            propensity = np.hstack((np.array(self.input_dependence), self.propensity))
-
-        i = [propensity]
-        if np.max(propensity) < 2:
-            a = [self.k]
-        elif np.max(propensity) == 2 and len(np.where(propensity == 2)) == 1:
-            a = copy(propensity)
-            a[np.argmax(a)] -= 1
-            i.append(a)
-            a = [self.k/2, -self.k/2]
-        else:
-            print('Propensity function is too complex.')
-        return i, a
-
-
-class LinearReaction(MassAction):
-    """
-    Simplified version of MassAction class for linear rate laws.
-    """
-    def __init__(self, **kwargs):
-        MassAction.__init__(self, **kwargs)
-        if self._propensity.sum() != 1 or self._input_dependence.sum() != 0:
-            print('prop', self._propensity)
-            print('input dep', self._input_dependence)
-            print(self.__class__)
-            raise ValueError('Reaction is not linear.')
-
-    def evaluate_rate(self, states, input_state, **kwargs):
-        return self.k * states[self.active_species]
-
-
-class LinearInput(MassAction):
-    """
-    Simplified version of MassAction class for linear input signal.
-    """
-    def __init__(self, **kwargs):
-        MassAction.__init__(self, **kwargs)
-        if self._propensity.sum() != 0 or self._input_dependence.sum() != 1:
-            raise ValueError('Reaction does not have linear inputs.')
-
-    def evaluate_rate(self, states, input_state, **kwargs):
-        return self.k * input_state
-
-
-class SecondOrderReaction(MassAction):
-    """
-    Simplified version of MassAction class for second order rate laws.
-    """
-
-    # WARNING: does not support multiple input channels (easy fix...)
-    def __init__(self, **kwargs):
-        MassAction.__init__(self, **kwargs)
-        if (self._propensity.sum() + self._input_dependence.sum()) != 2:
-            raise ValueError('Reaction is not second order.')
-
-        if 2 in self._propensity or 2 in self._input_dependence:
-            raise ValueError('Reaction is has a quadratic dependency.')
-
-    def evaluate_rate(self, states, input_state, **kwargs):
-        """ Compute and return current rate of a second order pathway. """
-        if self.num_active_species > 0:
-            rate = self.k * reduce(mul, states[self.active_species])
-        else:
-            rate = self.k
-        if self.active_inputs.size > 0:
-            rate *= input_state
 
         return rate

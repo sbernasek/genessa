@@ -150,3 +150,111 @@ cdef class cInputDependent(cSpeciesDependent):
             index += 1
 
         return activity
+
+
+#============================ PYTHON CODE ====================================
+
+
+class Reaction:
+    """
+    Base class for all reactions.
+    """
+
+    def __init__(self,
+                 stoichiometry,
+                 propensity=None,
+                 input_dependence=None,
+                 temperature_sensitive=True,
+                 atp_sensitive=False,
+                 ribosome_sensitive=False,
+                 labels={}):
+        """
+        Instantiate a single kinetic pathway.
+
+        Args:
+
+            stoichiometry (array like) - stoichiometric coefficients
+
+            propensity (array like) - propensity coefficients
+
+            input_dependence (float or array like) - order of input dependence
+
+            temperature_sensitive (bool) - if True, rate scales with temp
+
+            atp_sensitive (bool) - if True, rate scales with metabolism
+
+            ribosome_sensitive (bool) - if True, rate scales with ribosomes
+
+            labels (dict) - additional labels
+
+        """
+
+        # compile stoichiometry as a vector of coefficients
+        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
+
+         # compile propensity as a vector of coefficients
+        if propensity is None:
+            propensity = [0 for _ in range(self.N)]
+        self.propensity = np.array(propensity, dtype=np.float64)
+
+        # compile input dependence as a vector of coefficients
+        if type(input_dependence) == int:
+            input_dependence = np.array([input_dependence], dtype=np.float64)
+        elif input_dependence is None:
+            input_dependence = np.zeros(1, dtype=np.float64)
+        else:
+            input_dependence = np.array(input_dependence, dtype=np.float64)
+        self.input_dependence = input_dependence
+
+        # assign reaction rate sensitivities
+        self.temperature_sensitive = temperature_sensitive
+        self.atp_sensitive = atp_sensitive
+        self.ribosome_sensitive = ribosome_sensitive
+
+        # assign labels
+        self.labels = labels
+
+    @property
+    def N(self):
+        """ Dimensionality of state space. """
+        return self.stoichiometry.size
+
+    @property
+    def active_species(self):
+        """ Indices of active species. """
+        return np.where(self.propensity != 0)[0]
+
+    @property
+    def num_active_species(self):
+        """ Number of active species. """
+        return self.active_species.size
+
+    @property
+    def active_inputs(self):
+        """ Indices of active input channels. """
+        return np.where(self.input_dependence != 0)[0]
+
+    @property
+    def num_active_inputs(self):
+        """ Number of active input channels. """
+        return self.active_inputs.size
+
+    @property
+    def _propensity(self):
+        """ Propensity coefficients of active species. """
+        return self.propensity[self.active_species]
+
+    @property
+    def _input_dependence(self):
+        """ Input dependence coefficients of active species. """
+        return self.input_dependence[self.active_inputs]
+
+    @property
+    def zero_order(self):
+        """ Flag to skip rate computation for zero-order kinetics. """
+        return (self.propensity.sum()==0 and self.input_dependence is None)
+
+    @property
+    def name(self):
+        """ Reaction name. """
+        return self.labels['name']

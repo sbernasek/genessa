@@ -44,7 +44,8 @@ class CoupledCell(Cell):
                           w=0,
                           rep=None,
                           k_m=1,
-                          n=1):
+                          n=1,
+                          labels={}):
         """
         Add transcript synthesis reaction. Transcription rate is dependent upon coupling with other cells.
 
@@ -66,7 +67,12 @@ class CoupledCell(Cell):
 
             n (float) - hill coefficient for repressor
 
+            labels (dict) - additional labels
+
         """
+
+        # define reaction name
+        labels['name'] = gene+' transcription'
 
         # define stoichiometry
         stoichiometry = np.zeros(self.N, dtype=np.int64)
@@ -92,11 +98,10 @@ class CoupledCell(Cell):
                        a=a,
                        w=w,
                        repressors=repressors,
-                       rxn_type=gene+' transcription')
+                       labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
-        self.update()
 
 
 class CoupledCells(CoupledCell):
@@ -209,7 +214,7 @@ class CoupledCells(CoupledCell):
                 # compile kwargs for reactions
                 kw = {'stoichiometry': stoichiometry,
                       'propensity': propensity,
-                      'rxn_type': cell_id+rxn.rxn_type,
+                      'labels': dict(name=cell_id+rxn.name),
                       'parameters': rxn.parameters}
 
                 # add MassAction reaction
@@ -271,7 +276,8 @@ class CoupledCells(CoupledCell):
                           w=0,
                           rep=None,
                           k_m=1,
-                          n=1):
+                          n=1,
+                          labels={}):
         """
         Add transcript synthesis reaction for an individual cell. Transcription rate is dependent upon coupling with other cells.
 
@@ -295,7 +301,12 @@ class CoupledCells(CoupledCell):
 
             n (float) - hill coefficient for repressor
 
+            labels (dict) - additional labels
+
         """
+
+        # define reaction name
+        labels['name'] = 'Cell {}: '.format(cell)+gene+' transcription'
 
         # define stoichiometry
         stoichiometry = np.zeros(self.N, dtype=np.int64)
@@ -321,11 +332,10 @@ class CoupledCells(CoupledCell):
                        a=a,
                        w=w,
                        repressors=repressors,
-                       rxn_type='Cell {}: '.format(cell)+gene+' transcription')
+                       labels=labels)
 
         # add synthesis reaction
         self.reactions.append(rxn)
-        self.update()
 
     def add_coupling(self, adjacency, **kwargs):
         """

@@ -83,13 +83,12 @@ class TwoStateCell(Cell):
         self.on_states.update({k: v+shift for k,v in gene.on_states.items()})
         self.transcripts.update({k: v+shift for k,v in gene.transcripts.items()})
         self.proteins.update({k: v+shift for k,v in gene.proteins.items()})
-        self.update()
 
     def add_activation(self,
                         gene,
                         activator,
                         k=1,
-                        labels=None):
+                        labels={}):
         """
         Add transcript synthesis reaction.
 
@@ -104,6 +103,9 @@ class TwoStateCell(Cell):
             labels (dict) - additional labels for reaction
 
         """
+
+        # define reaction name
+        labels['name'] = gene+' activation'
 
         # define stoichiometry
         stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
@@ -128,14 +130,12 @@ class TwoStateCell(Cell):
                  propensity=propensity,
                  input_dependence=input_dependence,
                  k=k,
-                 rxn_type=gene+' activation',
                  atp_sensitive=False,
                  ribosome_sensitive=False,
                  labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
-        self.update()
 
       def add_transcriptional_repressor(self,
                                         actuator,
@@ -143,7 +143,7 @@ class TwoStateCell(Cell):
                                         k=1.,
                                         atp_sensitive=True,
                                         ribosome_sensitive=True,
-                                        labels=None):
+                                        labels={}):
         """
         Add transcriptional repressor.
 
@@ -162,6 +162,9 @@ class TwoStateCell(Cell):
             labels (dict) - additional labels for reaction
 
         """
+
+        # define reaction name
+        labels['name'] = gene+' repression'
 
         # define stoichiometry
         stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
@@ -186,11 +189,9 @@ class TwoStateCell(Cell):
                  propensity=propensity,
                  input_dependence=input_dependence,
                  k=k,
-                 rxn_type=gene+' repression',
                  atp_sensitive=atp_sensitive,
                  ribosome_sensitive=ribosome_sensitive,
                  labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
-        self.update()

@@ -41,7 +41,7 @@ class HillCell(Cell):
                           k_m=1,
                           n=1,
                           baseline=0.,
-                          labels=None):
+                          labels={}):
         """
         Add transcript synthesis reaction.
 
@@ -61,10 +61,12 @@ class HillCell(Cell):
 
             baseline (float) - baseline transcription rate
 
-            labels (dict) - additional labels for reaction
+            labels (dict) - additional labels
 
         """
 
+        # define reaction name
+        labels['name'] = gene+' transcription'
 
         # define stoichiometry
         stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
@@ -95,14 +97,12 @@ class HillCell(Cell):
                    n=n,
                    baseline=baseline,
                    repressors=repressors,
-                   rxn_type=gene+' transcription',
                    atp_sensitive=True,
                    ribosome_sensitive=False,
                    labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
-        self.update()
 
     def add_transcriptional_repressor(self,
                                       actuators,
@@ -153,5 +153,5 @@ class HillCell(Cell):
 
         # add repressor
         for rxn in self.reactions:
-            if rxn.__class__.__name__ == 'Hill' and target in rxn.rxn_type:
+            if rxn.__class__.__name__ == 'Hill' and target in rxn.name:
                 rxn.add_repressor(repressor)

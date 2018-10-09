@@ -13,6 +13,9 @@ from ..utilities import name_parameter
 from .hill cimport cIDRepressor, cHill
 from .base cimport cInputDependent
 
+# python intra-package imports
+from .base import Reaction
+
 
 cdef class cIDRepressor(cInputDependent):
 
@@ -62,8 +65,8 @@ cdef class cIDRepressor(cInputDependent):
         n = np.array([rxn.n for rxn in reps], dtype=np.float64)
 
         # add species dependence
-        species_ind =np.cumsum([0]+[rxn.num_active_substrates for rxn in reps]).astype(np.uint32)
-        species = np.hstack([rxn.active_substrates for rxn in reps]).astype(np.uint32)
+        species_ind =np.cumsum([0]+[rxn.num_active_species for rxn in reps]).astype(np.uint32)
+        species = np.hstack([rxn.active_species for rxn in reps]).astype(np.uint32)
         species_dependence = np.hstack([rxn._propensity for rxn in reps])
         inputs_ind = np.cumsum([0]+[rxn.num_active_inputs for rxn in reps]).astype(np.uint32)
         inputs = np.hstack([rxn.active_inputs for rxn in reps]).astype(np.uint32)
@@ -228,8 +231,8 @@ cdef class cHill(cIDRepressor):
         n = np.array([rxn.n for rxn in rxns], dtype=np.float64)
 
         # add species and input dependence
-        species_ind = np.cumsum([0]+[rxn.num_active_substrates for rxn in rxns]).astype(np.uint32)
-        species = np.hstack([rxn.active_substrates for rxn in rxns]).astype(np.uint32)
+        species_ind = np.cumsum([0]+[rxn.num_active_species for rxn in rxns]).astype(np.uint32)
+        species = np.hstack([rxn.active_species for rxn in rxns]).astype(np.uint32)
         species_dependence = np.hstack([rxn._propensity for rxn in rxns])
         species_dependence = species_dependence.astype(np.float64)
         inputs_ind = np.cumsum([0]+[rxn.num_active_inputs for rxn in rxns]).astype(np.uint32)
@@ -398,10 +401,10 @@ cdef class cHill(cIDRepressor):
 #=============================== PYTHON CODE ==================================
 
 
-class Hill:
+class Hill(Reaction):
 
     def __init__(self,
-                 stoichiometry=None,
+                 stoichiometry,
                  propensity=None,
                  input_dependence=None,
                  k=1,
@@ -409,13 +412,12 @@ class Hill:
                  n=1,
                  baseline=0,
                  repressors=None,
-                 rxn_type='hill',
                  rate_modifier=None,
                  temperature_sensitive=False,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
                  parameters=None,
-                 labels=None):
+                 labels={}):
         """
 
         Class describes a single hill-kinetic pathway.
@@ -438,8 +440,6 @@ class Hill:
 
             repressors (list) - enzymatic repressors
 
-            rxn_type (str) - name of reaction
-
             rate_modifier (array like) - rate constant sensitivity to inputs
 
             temperature_sensitive (bool) - if True, scale rate with temperature
@@ -452,52 +452,39 @@ class Hill:
 
         """
 
-        self.rxn_type = rxn_type
-
-        # assign labels
-        if labels is None:
-            labels = {}
-        self.labels = labels
-
-        self.zero_order = False
-
-        # define stoichiometry
-        if stoichiometry is None:
-            stoichiometry = [0]
-        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
-
-        # define rate law parameters
-        if propensity is None:
-            propensity = np.zeros(len(stoichiometry))
-        self.propensity = np.array(propensity, dtype=np.float64)
-
-        # convert input dependence to array
-        if type(input_dependence) == int:
-            input_dependence = [input_dependence]
-        if input_dependence is not None:
-            self.input_dependence = np.array(input_dependence, dtype=np.float64)
-        else:
-            self.input_dependence = np.zeros(1, dtype=np.float64)
+        # call Reaction instantiation
+        super().__init__(stoichiometry,
+                         propensity,
+                         input_dependence,
+                         temperature_sensitive=temperature_sensitive,
+                         atp_sensitive=atp_sensitive,
+                         ribosome_sensitive=ribosome_sensitive,
+                         labels=labels)
 
         # set parameters
         if parameters is None:
             parameters = {}
         self.parameters = parameters
+
+        # set rate constant
         k_value, k_name = name_parameter(k, 'k')
         if 'k' not in self.parameters.keys():
             self.parameters['k'] = k_name
         self.k = np.array([k_value], dtype=float)
 
+        # set michaelis coefficient
         km_value, km_name = name_parameter(k_m, 'k_m')
         if 'k_m' not in self.parameters.keys():
             self.parameters['k_m'] = km_name
         self.k_m = km_value
 
+        # set hill coefficient
         n_value, n_name = name_parameter(n, 'n')
         if 'n' not in self.parameters.keys():
             self.parameters['n'] = n_name
         self.n = n_value
 
+        # set baseline value
         baseline_value, baseline_name = name_parameter(baseline, 'v0')
         if 'v0' not in self.parameters.keys():
             self.parameters['v0'] = baseline_name
@@ -505,34 +492,23 @@ class Hill:
 
         # add repressors
         if repressors is None:
-            self.repressors = []
-        else:
-            self.repressors = repressors
+            repressors = []
+        self.repressors = repressors
 
         # set rate modifier
         if rate_modifier is None:
             rate_modifier = np.zeros(1, dtype=np.int64)
         self.rate_modifier = rate_modifier
 
-        # identify participating substrates
-        self.active_substrates = np.where(self.propensity != 0)[0]
-        self.active_inputs = np.where(np.logical_or(self.input_dependence != 0, self.rate_modifier != 0))[0]
-
-        # predefine active species mask
-        self.num_active_substrates = self.active_substrates.size
-        self.num_active_inputs = self.active_inputs.size
-        self._propensity = self.propensity[self.active_substrates]
-        self._input_dependence = self.input_dependence[self.active_inputs]
-
-        # assign reaction rate sensitivities
-        self.temperature_sensitive = temperature_sensitive
-        self.atp_sensitive = atp_sensitive
-        self.ribosome_sensitive = ribosome_sensitive
-
     @property
     def num_repressors(self):
         """ Number of repressors. """
         return len(self.repressors)
+
+    @property
+    def active_inputs(self):
+        """ Indices of active input channels. """
+        return np.where(np.logical_or(self.input_dependence != 0, self.rate_modifier != 0))[0]
 
     def shift(self, shift):
         """
@@ -561,12 +537,12 @@ class Hill:
                   n=self.n,
                   baseline=self.baseline,
                   repressors=repressors,
-                  rxn_type=self.rxn_type,
                   rate_modifier=self.rate_modifier,
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
                   ribosome_sensitive=self.ribosome_sensitive,
-                  parameters=self.parameters)
+                  parameters=self.parameters,
+                  labels=self.labels)
 
         return Hill(s, p, i, **kw)
 
@@ -580,9 +556,6 @@ class Hill:
 
         """
         self.propensity[species] += 1
-        self.active_substrates = np.where(self.propensity != 0)[0]
-        self._propensity = self.propensity[self.active_substrates]
-        #self.active_substrates[species] += 1
 
     def add_repressor(self, repressor):
         """
@@ -612,7 +585,7 @@ class Hill:
         """
 
         # get substrate activity
-        substrate_activity = (self._propensity * states[self.active_substrates]).sum() + (self.input_dependence*input_state).sum()
+        substrate_activity = (self._propensity * states[self.active_species]).sum() + (self.input_dependence*input_state).sum()
 
         # get repressor inhibition effects
         unoccupied_sites = 1
@@ -626,7 +599,7 @@ class Hill:
         return rate
 
 
-class Repressor:
+class Repressor(Reaction):
 
     def __init__(self,
                  propensity=None,
@@ -634,7 +607,7 @@ class Repressor:
                  k_m=1,
                  n=1,
                  parameters=None,
-                 labels=None):
+                 labels={}):
         """
         Class defines single instance of competitive enzyme occupancy.
 
@@ -642,7 +615,7 @@ class Repressor:
 
             propensity (array like) - weights for activating substrates
 
-            input_dependence (float or np array) - order of rate dependence upon input
+            input_dependence (float or np array) - order of input dependence
 
             k_m (float) - michaelis constant
 
@@ -652,48 +625,37 @@ class Repressor:
 
         """
 
-        # assign labels
-        if labels is None:
-            labels = {}
-        self.labels = labels
-
         # define rate law parameters
         if propensity is None:
             propensity = []
         self.propensity = np.array(propensity, dtype=np.float64)
 
-        # convert input dependence to array
+        # define input dependence
         if type(input_dependence) == int:
             input_dependence = [input_dependence]
-        if input_dependence is not None:
-            self.input_dependence = np.array(input_dependence, dtype=np.float64)
-        else:
-            self.input_dependence = np.zeros(1, dtype=np.float64)
+        elif input_dependence is None:
+            input_dependence = [0]
+        self.input_dependence = np.array(input_dependence, dtype=np.float64)
 
         # set parameters
         if parameters is None:
             parameters = {}
         self.parameters = parameters
 
+        # set michaelis constant
         km_value, km_name = name_parameter(k_m, 'k_m')
         if 'k_m' not in self.parameters.keys():
             self.parameters['k_m'] = km_name
         self.k_m = km_value
 
+        # set hill coefficient
         n_value, n_name = name_parameter(n, 'n')
         if 'n' not in self.parameters.keys():
             self.parameters['n'] = n_name
         self.n = n_value
 
-        # determine active substrates
-        self.active_substrates = np.where(self.propensity != 0)[0]
-        self.active_inputs = np.where(self.input_dependence != 0)[0]
-
-        # predefine active species mask
-        self.num_active_substrates = self.active_substrates.size
-        self.num_active_inputs = self.active_inputs.size
-        self._propensity = self.propensity[self.active_substrates]
-        self._input_dependence = self.input_dependence[self.active_inputs]
+        # assign labels
+        self.labels = labels
 
     def shift(self, shift):
         """
@@ -713,7 +675,8 @@ class Repressor:
         i = self.input_dependence
         kw = dict(k_m=self.k_m,
                   n=self.n,
-                  parameters=self.parameters)
+                  parameters=self.parameters,
+                  labels=self.labels)
         return Repressor(p, i, **kw)
 
     def get_occupancy(self, states, input_state):
@@ -733,7 +696,7 @@ class Repressor:
         """
 
         # get substrate activity
-        substrate_activity = (self._propensity * states[self.active_substrates]).sum() + (self.input_dependence * input_state).sum()
+        substrate_activity = (self._propensity * states[self.active_species]).sum() + (self.input_dependence * input_state).sum()
 
         # get overall rate
         occupancy = (substrate_activity**self.n)/(substrate_activity**self.n + self.k_m**self.n)

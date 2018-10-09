@@ -93,9 +93,10 @@ class Cell(Network):
 
         return ic
 
-    def update(self):
-        """ Update node key. """
-        self.node_key = {i: int(n_id) for i, n_id in enumerate(self.nodes)}
+    @property
+    def node_key(self):
+        """ Dictionary mapping node positional indices to node IDs. """
+        return dict(enumerate(self.nodes))
 
     def add_genes(self, names, **kwargs):
         """
@@ -133,7 +134,6 @@ class Cell(Network):
         # update dictionaries
         self.transcripts.update({k: v+shift for k,v in gene.transcripts.items()})
         self.proteins.update({k: v+shift for k,v in gene.proteins.items()})
-        self.update()
 
     def add_phosphorylation(self,
                             base,
@@ -159,6 +159,8 @@ class Cell(Network):
             Kr (float) - substrate conc. at half maximal dephosphorylation rate
 
             g (float) - phosphorylated protein decay rate constant
+
+            name (str) - name of phosphorylated species
 
         """
 
@@ -187,7 +189,7 @@ class Cell(Network):
                           None,
                           k=kf,
                           k_m=Kf,
-                          rxn_type=base.upper()+' phosphorylation')
+                          labels=dict(name=base.upper()+' phosphorylation'))
 
         # add reverse reaction
         propensity = np.zeros(self.N, dtype=np.int64)
@@ -197,7 +199,7 @@ class Cell(Network):
                             None,
                             k=kr,
                             k_m=Kr,
-                            rxn_type=name+' dephosphorylation')
+                            labels=dict(name=name+' dephosphorylation'))
 
         # add decay
         stoichiometry = np.zeros(self.N, dtype=np.int64)
@@ -206,12 +208,11 @@ class Cell(Network):
                            None,
                            None,
                            k=g,
-                           rxn_type=name+' decay')
+                           labels=dict(name=name+' decay'))
 
         # add reactions
         rxns = [rxn for rxn in [activation, deactivation, decay] if rxn.k != 0]
         self.reactions.extend(rxns)
-        self.update()
 
     def add_dimer(self,
                   p1,
@@ -253,19 +254,20 @@ class Cell(Network):
         stoichiometry[base1] = -1
         stoichiometry[base2] = -1
         stoichiometry[dimer_id] = 1
-        fwd_name, rev_name = name+' association', name+' dissociation'
-        fwd = MassAction(stoichiometry, None, None, kf, rxn_type=fwd_name)
-        rev = MassAction(-stoichiometry, None, None, kr, rxn_type=rev_name)
+        fwd_labels = dict(name=name+' association')
+        fwd = MassAction(stoichiometry, None, None, kf, labels=fwd_labels)
+        rev_labels = dict(name=name+' dissociation')
+        rev = MassAction(-stoichiometry, None, None, kr, labels=rev_labels)
 
         # add decay
         s = np.zeros(self.N, dtype=np.int64)
         s[dimer_id] = -1
-        decay = MassAction(s, k=g, rxn_type='{:s} decay'.format(name))
+        decay_labels = dict(name='{:s} decay'.format(name))
+        decay = MassAction(s, k=g, labels=decay_labels)
 
         # add reactions
         rxns = [rxn for rxn in [fwd, rev, decay] if rxn.k != 0]
         self.reactions.extend(rxns)
-        self.update()
 
     def add_translocation(self,
                           base,
@@ -294,7 +296,7 @@ class Cell(Network):
         if name is None:
             name = 'n'+base
 
-        node_id = self.N
+        node_id = copy(self.N)
         added_node_ids = np.arange(node_id, node_id+1)
         self.update_reaction_dimensions(added_node_ids=added_node_ids)
         self.nodes = np.append(self.nodes, added_node_ids)
@@ -305,25 +307,30 @@ class Cell(Network):
         stoich = np.zeros(self.N, dtype=np.int64)
         stoich[base_id] = -1
         stoich[node_id] = 1
-        fwd = MassAction(stoich, None, None, kf, rxn_type=base+' import')
-        rev = MassAction(-stoich, None, None, kr, rxn_type=base+' export')
+        fwd_labels = dict(name=base+' import')
+        fwd = MassAction(stoich, None, None, kf, labels=fwd_labels)
+        rev_labels = dict(name=base+' export')
+        rev = MassAction(-stoich, None, None, kr, labels=rev_labels)
 
         # add decay
         stoich = np.zeros(self.N, dtype=np.int64)
         stoich[node_id] = -1
-        decay = MassAction(stoich, k=g, rxn_type='{:s} decay'.format(name))
+        decay_labels = dict(name='{:s} decay'.format(name))
+        decay = MassAction(stoich, k=g, labels=decay_labels)
 
         # add reactions
         rxns = [rxn for rxn in [fwd, rev, decay] if rxn.k != 0]
         self.reactions.extend(rxns)
-        self.update()
 
     def add_transcript_degradation(self,
                                    actuator,
                                    target,
                                    k=1.,
                                    Kd=1.,
-                                   labels=None):
+                                   temperature_sensitive=True,
+                                   atp_sensitive=True,
+                                   ribosome_sensitive=True,
+                                   labels={}):
         """
         Add transcript degradation term based on Michaelis Menten kinetics.
 
@@ -331,15 +338,24 @@ class Cell(Network):
 
             actuator (str) - actuating substrate
 
-            target (float) - target gene
+            target (str) - target gene
 
             k (float) - maximum degradation rate
 
             Kd (float) - substrate concentration for half maximal rate
 
+            temperature_sensitive (bool) - scale rate with temperature
+
+            atp_sensitive (bool) - scale rate with metabolism
+
+            ribosome_sensitive (bool) - scale rate with ribosomes
+
             labels (dict) - additional labels for reaction
 
         """
+
+        # define reaction name
+        labels['name'] = target+' transcript deg.'
 
         # create reaction for target
         stoichiometry = np.zeros(self.N, dtype=np.int64)
@@ -363,12 +379,13 @@ class Cell(Network):
                    input_dependence,
                    k=k,
                    k_m=Kd,
-                   rxn_type=target+' transcript deg.',
+                   temperature_sensitive=True,
+                   atp_sensitive=True,
+                   ribosome_sensitive=True,
                    labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
-        self.update()
 
     def add_protein_degradation(self,
                                 actuator,
@@ -376,7 +393,10 @@ class Cell(Network):
                                 k=1.,
                                 Kd=1.,
                                 modulation=None,
-                                labels=None):
+                                temperature_sensitive=True,
+                                atp_sensitive=True,
+                                ribosome_sensitive=True,
+                                labels={}):
         """
         Add protein degradation term based on Michaelis Menten kinetics.
 
@@ -384,7 +404,7 @@ class Cell(Network):
 
             actuator (str) - actuating substrate
 
-            target (float) - target protein
+            target (str) - target protein
 
             k (float) - maximum degradation rate
 
@@ -392,15 +412,23 @@ class Cell(Network):
 
             modulation (tuple) - (input_dimension, modulation_factor) pair
 
+            temperature_sensitive (bool) - scale rate with temperature
+
+            atp_sensitive (bool) - scale rate with metabolism
+
+            ribosome_sensitive (bool) - scale rate with ribosomes
+
             labels (dict) - additional labels for reaction
 
         """
+
+        # define reaction name
+        labels['name'] = target+'  deg.'
 
         # create reaction for target
         stoichiometry = np.zeros(self.N, dtype=np.int64)
         stoichiometry[self.proteins[target]] = -1
         propensity = np.zeros(self.N, dtype=np.int64)
-        rxn_name = target+'  deg.'
 
         # determine input dependence
         if 'IN' not in actuator:
@@ -425,10 +453,76 @@ class Cell(Network):
                    input_dependence,
                    k=k,
                    k_m=Kd,
-                   rxn_type=rxn_name,
                    rate_modifier=rate_modifier,
+                   temperature_sensitive=temperature_sensitive,
+                   atp_sensitive=atp_sensitive,
+                   ribosome_sensitive=ribosome_sensitive,
                    labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
-        self.update()
+
+    def add_linear_feedback(self,
+                            actuator,
+                            target,
+                            mode='protein',
+                            k=1.,
+                            temperature_sensitive=True,
+                            atp_sensitive=True,
+                            ribosome_sensitive=True,
+                            labels={}):
+        """
+        Add linear feedback term.
+
+        Args:
+
+            sensor (str) - sensing substrate
+
+            target (str) - target gene
+
+            mode (str) - 'protein', 'transcript', or 'gene'
+
+            k (float) - rate constant (feedback strength)
+
+            temperature_sensitive (bool) - scale rate with temperature
+
+            atp_sensitive (bool) - scale rate with metabolism
+
+            ribosome_sensitive (bool) - scale rate with ribosomes
+
+            labels (dict) - additional labels for reaction
+
+            kwargs: keyword arguments for MassAction instantiation
+
+        """
+
+        # assign labels
+        labels['name'] = 'FB on {:s}'.format(target)
+
+        # define stoichiometry
+        stoichiometry = np.zeros(self.N, dtype=np.int64)
+        if mode == 'protein':
+            stoichiometry[self.proteins[target]] = -1
+        elif mode == 'transcript':
+            stoichiometry[self.transcripts[target]] = -1
+        elif mode == 'gene':
+            stoichiometry[self.genes[target]] = -1
+
+        # define propensity
+        assert actuator in self.proteins.keys(), 'Actuator not recognized.'
+        propensity = np.zeros(self.N, dtype=np.int64)
+        propensity[self.proteins[actuator]] = 1
+
+        # define reaction
+        rxn = MassAction(stoichiometry,
+                         propensity=propensity,
+                         input_dependence=None,
+                         k=k,
+                         temperature_sensitive=temperature_sensitive,
+                         atp_sensitive=atp_sensitive,
+                         ribosome_sensitive=ribosome_sensitive,
+                         labels=labels,
+                         **kwargs)
+
+        # add reaction
+        self.reactions.append(rxn)

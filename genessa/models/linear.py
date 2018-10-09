@@ -77,13 +77,12 @@ class LinearCell(Cell):
         self.genes.update({k: v+shift for k,v in gene.genes.items()})
         self.transcripts.update({k: v+shift for k,v in gene.transcripts.items()})
         self.proteins.update({k: v+shift for k,v in gene.proteins.items()})
-        self.update()
 
     def add_activation(self,
                         gene,
                         activator,
                         k=1,
-                        labels=None):
+                        labels={}):
         """
         Add transcript synthesis reaction.
 
@@ -98,6 +97,9 @@ class LinearCell(Cell):
             labels (dict) - additional labels for reaction
 
         """
+
+        # define reaction name
+        labels['name'] = gene+' activation'
 
         # define stoichiometry
         stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
@@ -120,11 +122,9 @@ class LinearCell(Cell):
                  propensity=propensity,
                  input_dependence=input_dependence,
                  k=k,
-                 rxn_type=gene+' activation',
                  atp_sensitive=False,
                  ribosome_sensitive=False,
                  labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
-        self.update()

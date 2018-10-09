@@ -12,6 +12,9 @@ from operator import add
 from .marbach cimport cRegulatoryModule, cTranscription
 from .marbach cimport cRxnMap, get_binary_repr_size
 
+# python intra-package imports
+from .base import Reaction
+
 
 cdef class cRegulatoryModule:
 
@@ -582,8 +585,10 @@ class RegulatoryModule:
         self.k = k
         self.n = n
 
-        # predefine active species mask
-        self.num_modifiers = self.modifiers.size
+    @property
+    def num_modifiers(self):
+        """ Number of modifiers. """
+        return self.modifiers.size
 
     def get_activation(self, x):
         """ x are the levels of active species """
@@ -633,35 +638,38 @@ class RegulatoryModule:
         return RegulatoryModule(modifiers, nA, nD, bindsAsComplex, k, n)
 
 
-class Transcription:
+class Transcription(Reaction):
 
     def __init__(self,
-                 stoichiometry=None,
+                 stoichiometry,
                  modules=None,
                  k=1,
                  alpha=None,
                  perturbed=False,
                  input_dependence=None,
-                 rxn_type=None,
-                 parameters=None,
-                 labels=None):
+                 temperature_sensitive=True,
+                 atp_sensitive=True,
+                 ribosome_sensitive=False,
+                 labels={}):
 
-        self.rxn_type = rxn_type
+        # add regulatory modules
+        if modules is None:
+            modules = []
+        self.modules = modules
 
-        # assign labels
-        if labels is None:
-            labels = {}
-        self.labels = labels
+        # compile propensity as a boolean array
+        propensity = np.zeros(len(stoichiometry), dtype=np.int64)
+        for mod in self.modules:
+            propensity[mod.modifiers] = 1
 
-        # compile stoichiometry as a vector of coefficients
-        if stoichiometry is None:
-            stoichiometry = [0]
-        self.stoichiometry = np.array(stoichiometry, dtype=np.int64)
-
-        # set reaction parameters
-        if parameters is None:
-            parameters = {}
-        self.parameters = parameters
+        # call Reaction instantiation
+        super().__init__(stoichiometry,
+                         propensity=propensity,
+                         input_dependence=input_dependence,
+                         temperature_sensitive=temperature_sensitive,
+                         atp_sensitive=atp_sensitive,
+                         ribosome_sensitive=ribosome_sensitive,
+                         labels=labels)
 
         # add k and alpha
         self.k = np.array([k], dtype=np.float64)
@@ -670,35 +678,15 @@ class Transcription:
         # set perturbation sensitivity flag
         self.perturbed = perturbed
 
-        # add modules
-        if modules is None:
-            self.modules = []
-        else:
-            self.modules = modules
-        self.num_modules = len(self.modules)
+    @property
+    def num_modules(self):
+        """ Number of regulatory modules. """
+        return len(self.modules)
 
-        # compile propensity as a boolean array
-        self.propensity = np.zeros(len(stoichiometry), dtype=np.int64)
-        for mod in self.modules:
-            self.propensity[mod.modifiers] = 1
-
-        # if kinetics are zeroth order, raise flag to skip rate computation
-        self.zero_order = False
-        if self.num_modules == 0:
-            self.zero_order = True
-
-        # set input dependence (currently have no influence)
-        if input_dependence is None:
-            input_dependence = np.zeros(1, dtype=np.uint32)
-        self.input_dependence = input_dependence
-        self.active_inputs = np.where(self.input_dependence != 0)[0]
-        self.num_active_inputs = self.active_inputs.size
-        self._input_dependence = self.input_dependence[self.active_inputs]
-
-        # assign reaction rate sensitivities
-        self.temperature_sensitive = True
-        self.atp_sensitive = True
-        self.ribosome_sensitive = False
+    @property
+    def zero_order(self):
+        """ Flag to skip rate computation for zero-order kinetics. """
+        return self.num_modules == 0
 
     def shift(self, shift):
         """
@@ -722,12 +710,15 @@ class Transcription:
                   alpha=self.alpha,
                   perturbed=self.perturbed,
                   input_dependence=self.input_dependence,
-                  rxn_type=self.rxn_type,
-                  parameters=self.parameters)
+                  temperature_sensitive=self.temperature_sensitive,
+                  atp_sensitive=self.atp_sensitive,
+                  ribosome_sensitive=self.ribosome_sensitive,
+                  labels=self.labels)
 
-        return Transcription(s, modules, **kw)
+        return self.__class__(s, modules, **kw)
 
     def evaluate_rate(self, x, inputs):
+        """ Evaluate reaction rate. """
 
         m = np.array([mod.get_activation(x) for mod in self.modules], dtype=np.float64)
 
@@ -742,5 +733,4 @@ class Transcription:
                     p *= (1-m[j])
             rate += (alpha * p)
 
-        #rate *= (self.k + (self._input_dependence*inputs).sum())
         return rate

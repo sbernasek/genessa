@@ -86,10 +86,10 @@ class RateLaws:
         sensitivities = self.assemble_sensitivities(rxn)
 
         # set reaction name
-        if rxn.rxn_type is None:
+        if rxn.name is None:
             name = 'Not Named'
         else:
-            name = rxn.rxn_type
+            name = rxn.name
 
         # add reaction to table
         self.table.append([name, reactants, products, rate_law, rate_constant])
@@ -97,7 +97,7 @@ class RateLaws:
         # add any repressors for Hill and Coupling reactions
         if rxn.__class__.__name__ in ('Hill', 'Coupling'):
             for repressor in rxn.repressors:
-                repressor_name = 'Repression of ' + rxn.rxn_type
+                repressor_name = 'Repression of ' + rxn.name
                 rate_law = self.get_enzymatic_rate_law(repressor)
                 rate_law = '1 - ' + rate_law
                 self.table.append([repressor_name, '', '', rate_law, '', 'NA'])
@@ -303,9 +303,9 @@ class RateLaws:
                 else:
                     activity += (coefficient + input_name)
 
-        if len(rxn.active_substrates) > 0 and len(activity) > 0:
+        if rxn.num_active_species > 0 and len(activity) > 0:
             activity += '+' + substrate_contribution
-        elif len(rxn.active_substrates) > 0 and len(activity) == 0:
+        elif rxn.num_active_species > 0 and len(activity) == 0:
             activity += substrate_contribution
 
         # assemble rate law

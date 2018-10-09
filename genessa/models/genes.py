@@ -58,7 +58,7 @@ class Gene:
             MassAction([-1, 0],
                        [1, 0],
                        k=g1,
-                       rxn_type=mrna_decay,
+                       labels=dict(name=mrna_decay),
                        atp_sensitive=False,
                        ribosome_sensitive=False),
 
@@ -66,7 +66,7 @@ class Gene:
             MassAction([0, 1],
                        [1, 0],
                        k=k,
-                       rxn_type=translation,
+                       labels=dict(name=translation),
                        atp_sensitive=True,
                        ribosome_sensitive=True),
 
@@ -74,7 +74,7 @@ class Gene:
             MassAction([0, -1],
                        [0, 1],
                        k=g2,
-                       rxn_type=protein_decay,
+                       labels=dict(name=protein_decay),
                        atp_sensitive=True,
                        ribosome_sensitive=True)]
 
@@ -138,7 +138,7 @@ class LinearGene:
             MassAction([-1, 0, 0],
                        [1, 0, 0],
                        k=g0,
-                       rxn_type=gene_name+' off rate',
+                       labels=dict(name=gene_name+' off rate'),
                        atp_sensitive=False,
                        ribosome_sensitive=False),
 
@@ -146,7 +146,7 @@ class LinearGene:
             MassAction([0, 1, 0],
                        [1, 0, 0],
                        k=k1,
-                       rxn_type=gene_name+' transcription',
+                       labels=dict(name=gene_name+' transcription'),
                        atp_sensitive=True,
                        ribosome_sensitive=False),
 
@@ -154,7 +154,7 @@ class LinearGene:
             MassAction([0, -1, 0],
                        [0, 1, 0],
                        k=g1,
-                       rxn_type=gene_name+' decay',
+                       labels=dict(name=gene_name+' decay'),
                        atp_sensitive=False,
                        ribosome_sensitive=False),
 
@@ -162,7 +162,7 @@ class LinearGene:
             MassAction([0, 0, 1],
                        [0, 1, 0],
                        k=k2,
-                       rxn_type=protein_name+' translation',
+                       labels=dict(name=protein_name+' translation'),
                        atp_sensitive=True,
                        ribosome_sensitive=True),
 
@@ -170,7 +170,7 @@ class LinearGene:
             MassAction([0, 0, -1],
                        [0, 0, 1],
                        k=g2,
-                       rxn_type=protein_name+' decay',
+                       labels=dict(name=protein_name+' decay'),
                        atp_sensitive=True,
                        ribosome_sensitive=True)]
 
@@ -240,7 +240,7 @@ class TwoStateGene:
             MassAction([-1, 1, 0, 0],
                        [1, 0, 0, 0],
                        k=k0,
-                       rxn_type=gene_name+' on rate',
+                       labels=dict(name=gene_name+' on rate'),
                        atp_sensitive=False,
                        ribosome_sensitive=False),
 
@@ -248,7 +248,7 @@ class TwoStateGene:
             MassAction([1, -1, 0, 0],
                        [0, 1, 0, 0],
                        k=g0,
-                       rxn_type=gene_name+' off rate',
+                       labels=dict(name=gene_name+' off rate'),
                        atp_sensitive=False,
                        ribosome_sensitive=False),
 
@@ -256,7 +256,7 @@ class TwoStateGene:
             MassAction([0, 0, 1, 0],
                        [0, 1, 0, 0],
                        k=k1,
-                       rxn_type=gene_name+' transcription',
+                       labels=dict(name=gene_name+' transcription'),
                        atp_sensitive=True,
                        ribosome_sensitive=False),
 
@@ -264,7 +264,7 @@ class TwoStateGene:
             MassAction([0, 0, -1, 0],
                        [0, 0, 1, 0],
                        k=g1,
-                       rxn_type=gene_name+' decay',
+                       labels=dict(name=gene_name+' decay'),
                        atp_sensitive=False,
                        ribosome_sensitive=False),
 
@@ -272,7 +272,7 @@ class TwoStateGene:
             MassAction([0, 0, 0, 1],
                        [0, 0, 1, 0],
                        k=k2,
-                       rxn_type=protein_name+' translation',
+                       labels=dict(name=protein_name+' translation'),
                        atp_sensitive=True,
                        ribosome_sensitive=True),
 
@@ -280,6 +280,6 @@ class TwoStateGene:
             MassAction([0, 0, 0, -1],
                        [0, 0, 0, 1],
                        k=g2,
-                       rxn_type=protein_name+' decay',
+                       labels=dict(name=protein_name+' decay'),
                        atp_sensitive=True,
                        ribosome_sensitive=True)]

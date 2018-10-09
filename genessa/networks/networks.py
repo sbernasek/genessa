@@ -122,7 +122,6 @@ class Network:
             for rxn in self.reactions:
                 rxn.stoichiometry = np.insert(rxn.stoichiometry, insertion_points, np.zeros(insertion_points.size))
                 rxn.propensity = np.insert(rxn.propensity, insertion_points, np.zeros(insertion_points.size))
-                rxn.active_species = np.where(rxn.propensity != 0)[0]
 
         # remove expired nodes from stoichiometry and propensity vectors
         if removed_node_ids is not None:
@@ -130,7 +129,6 @@ class Network:
             for rxn in self.reactions:
                 rxn.stoichiometry = np.delete(rxn.stoichiometry, removed_dimensions)
                 rxn.propensity = np.delete(rxn.propensity, removed_dimensions)
-                rxn.active_species = np.where(rxn.propensity != 0)[0]
 
     def resize_inputs(self):
         """ Resize input dependence vector for all unaffected reactions. """

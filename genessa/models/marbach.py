@@ -39,6 +39,7 @@ class MarbachCell(Cell):
                           k=1,
                           alpha=None,
                           perturbed=False,
+                          labels={},
                           **kwargs):
         """
         Add transcript synthesis reaction.
@@ -55,9 +56,14 @@ class MarbachCell(Cell):
 
             perturbed (bool) - if True, rate is subject to perturbation
 
+            labels (dict) - additional labels for reaction
+
             kwargs: keyword arguments for reaction
 
         """
+
+        # define reaction name
+        labels['name'] = gene+' transcription'
 
         # define stoichiometry
         stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
@@ -69,11 +75,10 @@ class MarbachCell(Cell):
                             k=k,
                             alpha=alpha,
                             perturbed=perturbed,
-                            rxn_type=gene+' transcription',
                             atp_sensitive=True,
                             ribosome_sensitive=False,
+                            labels=labels,
                             **kwargs)
 
         # add reaction
         self.reactions.append(rxn)
-        self.update()
