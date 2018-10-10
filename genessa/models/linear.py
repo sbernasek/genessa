@@ -84,7 +84,7 @@ class LinearCell(Cell):
                         k=1,
                         labels={}):
         """
-        Add transcript synthesis reaction.
+        Add gene activation reaction.
 
         Args:
 

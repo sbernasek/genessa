@@ -203,16 +203,6 @@ class TimeSeries:
             if mean:
                 ax.plot(self.t, self.mean[dim, :], '-', color=color, lw=1, alpha=1)
 
-        # set ylim
-        ymax = np.max(self.states[:, np.array(dims), :])
-        if ymax != 0:
-            ax.set_ylim(0, 1.2*ymax)
-
-        # add axis labels
-        ax.set_xlabel('Time', fontsize=8)
-        ax.set_ylabel('Species {:s}'.format(str(dims)), fontsize=8)
-        ax.tick_params(labelsize=7)
-
 
 class GaussianModel(TimeSeries):
     """
@@ -353,7 +343,6 @@ class GaussianModel(TimeSeries):
                                  ax=None,
                                  confidence=0.98,
                                  dims=None,
-                                 time_scaling=1,
                                  colors=None,
                                  mean=False,
                                  alpha=0.5):
@@ -367,8 +356,6 @@ class GaussianModel(TimeSeries):
             confidence (float) - confidence interval
 
             dims (iterable) - dimensions of state space to be plotted
-
-            time_scaling (float) - hours per unit time
 
             colors (iterable) - colors for confidence interval shading
 
@@ -391,26 +378,18 @@ class GaussianModel(TimeSeries):
             dims = (self.mean.shape[0] - 1,)
 
         # plot confidence interval
-        lower_bound = self.norm.ppf((1-confidence)/2)
-        upper_bound = self.norm.ppf((1+confidence)/2)
+        lbound = self.norm.ppf((1-confidence)/2)
+        ubound = self.norm.ppf((1+confidence)/2)
 
         # iterate across dimensions
         for dim, color in zip(dims, colors):
 
             # add confidence interval
-            ax.fill_between(self.t*time_scaling, lower_bound[dim], upper_bound[dim], color=color, alpha=alpha, linewidth=0)
+            ax.fill_between(self.t, lbound[dim], ubound[dim], color=color, alpha=alpha, linewidth=0)
 
             # add mean to plot
             if mean is True:
-                ax.plot(self.t*time_scaling, self.mean[dim, :], '-', color=color, linewidth=1, alpha=1)
-
-        # set ylim
-        ax.set_ylim(0, 1.2*np.max(upper_bound))
-
-        # add axis labels
-        ax.set_xlabel('Time', fontsize=14)
-        ax.set_ylabel('Species {:s}'.format(str(dims)), fontsize=14)
-        ax.tick_params(labelsize=14)
+                ax.plot(self.t, self.mean[dim, :], '-', color=color, linewidth=1, alpha=1)
 
     def get_deviation_model(self, steady_state=None):
         """

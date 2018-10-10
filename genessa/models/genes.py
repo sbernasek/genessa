@@ -76,7 +76,7 @@ class Gene:
                        k=g2,
                        labels=dict(name=protein_decay),
                        atp_sensitive=True,
-                       ribosome_sensitive=True)]
+                       ribosome_sensitive=False)]
 
 
 class LinearGene:
@@ -172,7 +172,7 @@ class LinearGene:
                        k=g2,
                        labels=dict(name=protein_name+' decay'),
                        atp_sensitive=True,
-                       ribosome_sensitive=True)]
+                       ribosome_sensitive=False)]
 
 
 class TwoStateGene:
@@ -282,4 +282,4 @@ class TwoStateGene:
                        k=g2,
                        labels=dict(name=protein_name+' decay'),
                        atp_sensitive=True,
-                       ribosome_sensitive=True)]
+                       ribosome_sensitive=False)]
