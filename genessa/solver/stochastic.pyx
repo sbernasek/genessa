@@ -70,7 +70,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
         cdef unsigned int i
 
         # initialize array for regular states
-        self.rstates = array('I', np.zeros(self.N, dtype=np.uint32))
+        #self.rstates = array('I', np.zeros(self.N, dtype=np.uint32))
 
         # set flag for integrator
         if self.R.icontrol.M == 0:
@@ -212,12 +212,13 @@ cdef class cStochasticSystem(cDeterministicSystem):
             self.set_inputs(signal.get_values(0))
 
         # initialize all rates and sort order
+        self.R.reset_rates()
         self.R.update_all(self.states, self.inputs, self.cumulative)
         self.set_rxn_order(self.get_rxn_rates())
 
         # preallocate regular states array to record simulation history
-        cdef unsigned int num_timepoints = <unsigned int>ceil(duration/dt)
-        rstates = np.empty((self.N, num_timepoints), dtype=np.uint32)
+        cdef unsigned int T = <unsigned int>ceil(duration/dt)
+        rstates = np.zeros((T, self.N), dtype=np.uint32)
         self.rstates = array('I', rstates.flatten())
 
         # run stochastic simulation algorithm
@@ -225,14 +226,14 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
         #return numpy arrays
         cdef np.ndarray times = np.arange(0, duration, dt)
-        cdef np.ndarray states = np.frombuffer(self.rstates, dtype=np.uint32).reshape(self.N, num_timepoints)
+        cdef np.ndarray states = np.frombuffer(self.rstates, dtype=np.uint32).reshape(T, self.N).T
 
         return times, states
 
     cdef void ssa(self,
                     cSignalType signal,
                     double duration,
-                    double dt) nogil:
+                    double dt) with gil:
         """
         Run Gillespie SSA.
 
@@ -251,8 +252,8 @@ cdef class cStochasticSystem(cDeterministicSystem):
         cdef unsigned int t_index = 0
         cdef unsigned int s_index
         cdef double t = 0.
-        cdef double threshold = 0.
-        cdef unsigned int num_timepoints = <unsigned int>ceil(duration/dt)
+        cdef double sampling_point = 0.
+        cdef unsigned int T = <unsigned int>ceil(duration/dt)
 
         # declare items used throughout simulation
         cdef unsigned int rxn = 0
@@ -272,12 +273,10 @@ cdef class cStochasticSystem(cDeterministicSystem):
         while t < duration:
 
             # update stored state values
-            while t >= threshold:
-                for s_index in xrange(self.N):
-                    self.rstates.data.as_uints[s_index*num_timepoints+t_index] = self.states[s_index]
-                threshold += dt
+            while sampling_point <= t:
+                self.record_states(t_index)
+                sampling_point += dt
                 t_index += 1
-                #self.set_rxn_order(self.R.rates)
 
             # update input value
             if self.null_input == 0:
@@ -285,21 +284,23 @@ cdef class cStochasticSystem(cDeterministicSystem):
                 # update input value
                 signal.update(t)
 
+                #print('At {:0.2f}, I={:0.1f}'.format(t, signal.value[0]))
+
                 # check if input changed and input rates accordingly
                 for index in xrange(self.I):
                     changed = signal.compare_value(self.inputs, index)
                     if changed == 1:
                         self.inputs[index] = signal.value[index]
                         self.R.update_after_input_change(self.states,
-                                                               self.inputs,
-                                                               self.cumulative,
-                                                               index)
+                                                       self.inputs,
+                                                       self.cumulative,
+                                                       index)
 
             # update reaction rates
             self.R.update_after_rxn_fired(self.states,
-                                                self.inputs,
-                                                self.cumulative,
-                                                rxn)
+                                            self.inputs,
+                                            self.cumulative,
+                                            rxn)
 
             # if total rate is zero, keep stepping until input changes
             if self.R.total_rate == 0:
@@ -319,9 +320,16 @@ cdef class cStochasticSystem(cDeterministicSystem):
                             t += dt
                     continue
 
-            # choose a reaction
+            # evaluate timestep
             rfloat = rand()/(RAND_MAX*1.0)
             tau = evaluate_timestep(self.R.total_rate, rfloat)
+
+            # if timestep is longer than dt, increment by dt
+            if tau > dt:
+                t += dt
+                continue
+
+            # choose a reaction
             rxn = choose_rxn(self.rxn_order,
                              self.R.rates,
                              self.M,
@@ -341,10 +349,8 @@ cdef class cStochasticSystem(cDeterministicSystem):
         # ================================================================
 
         # interpolate any later values
-        while threshold < duration:
-            for s_index in xrange(self.N):
-                self.rstates.data.as_uints[s_index*num_timepoints+t_index] = self.states[s_index]
-            threshold += dt
+        while t_index < T:
+            self.record_states(t_index)
             t_index += 1
 
     cdef void fire_reaction(self,
@@ -395,6 +401,19 @@ cdef class cStochasticSystem(cDeterministicSystem):
         cdef unsigned int i
         for i in xrange(self.N):
             cumulative[i] += (tau * states[i])
+
+    cdef void record_states(self, unsigned int t_index) nogil:
+        """
+        Record current state levels.
+
+        Args:
+
+            t_index (unsigned int) - index of recorded timepoint
+
+        """
+        cdef unsigned int i
+        for i in xrange(self.N):
+            self.rstates.data.as_uints[t_index*self.N+i] = self.states[i]
 
 
 # ============================= PYTHON CODE ===================================
@@ -612,6 +631,6 @@ class MonteCarloSimulation(StochasticSimulation):
             samples.append(states)
 
         # instantiate time series object
-        timeseries = TimeSeries(times, np.array(samples))
+        timeseries = TimeSeries(times, np.array(samples, dtype=np.uint32))
 
         return timeseries

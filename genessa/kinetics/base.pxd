@@ -7,7 +7,6 @@ cdef class cSpeciesDependent:
     cdef unsigned int M
     cdef array k
     cdef array species_ind, n_active_species, species, species_dependence
-    cdef array rates
 
     # methods
     cdef double get_species_activity(self,

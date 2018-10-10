@@ -65,7 +65,6 @@ cdef class cTranscription:
     cdef cRegulatoryModule modules_obj
     cdef array modules_ind
     cdef array num_modules
-    cdef array rates
     cdef array inputs_ind
     cdef array num_inputs
     cdef array inputs

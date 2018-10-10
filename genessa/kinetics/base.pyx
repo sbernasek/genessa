@@ -29,9 +29,6 @@ cdef class cSpeciesDependent:
         self.species = array('I', species)
         self.species_dependence = array('d', species_dependence)
 
-        # initialize rate vector
-        self.rates = array('d', np.zeros(M, dtype=np.float64))
-
     cdef double get_species_activity(self,
                                      unsigned int rxn,
                                      unsigned int *states) nogil:
@@ -215,6 +212,11 @@ class Reaction:
         self.labels = labels
 
     @property
+    def type(self):
+        """ Reaction type. """
+        return self.__class__.__name__
+
+    @property
     def N(self):
         """ Dimensionality of state space. """
         return self.stoichiometry.size
@@ -258,3 +260,9 @@ class Reaction:
     def name(self):
         """ Reaction name. """
         return self.labels['name']
+
+    @property
+    def perturbed(self):
+        """ Perturbation flag. """
+        is_label = lambda x: x in self.labels.keys()
+        return self.labels['perturbed'] if is_label('perturbed') else False

@@ -32,6 +32,8 @@ cdef class cRates:
     # methods
     cdef void allocate_memory(self)
 
+    cdef void reset_rates(self)
+
     cdef double evaluate_rxn_rate(self,
         unsigned int rxn,
         unsigned int *states,

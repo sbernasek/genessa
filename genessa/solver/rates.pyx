@@ -108,15 +108,14 @@ cdef class cRates:
         self.input_map = cRxnMap(input_map)
         self.ptb_map = cRxnMap(ptb_map)
 
-        # initialize total reaction rate
-        self.total_rate = 0
-
         # allocate and populate memory for arrays
         self.allocate_memory()
         for i in xrange(self.M):
             self.rxn_types[i] = rxn_types[i]
             self.rxn_keys[i] = rxn_keys[i]
-            self.rates[i] = 0.
+
+        # initialize all reaction rates as zero
+        self.reset_rates()
 
     def __dealloc__(self):
         """ Deallocate memory from all array attributes. """
@@ -148,6 +147,13 @@ cdef class cRates:
         self.rates = <double*> PyMem_Malloc(self.M * sizeof(double))
         if not self.rates:
             raise MemoryError('Reaction rates memory block not allocated.')
+
+    cdef void reset_rates(self):
+        """ Reset all rates to zero. """
+        cdef unsigned int i
+        self.total_rate = 0
+        for i in xrange(self.M):
+            self.rates[i] = 0.
 
     cdef double evaluate_rxn_rate(self,
                                  unsigned int rxn,

@@ -463,7 +463,7 @@ class Cell(Network):
         self.reactions.append(rxn)
 
     def add_linear_feedback(self,
-                            actuator,
+                            sensor,
                             target,
                             mode='protein',
                             k=1.,
@@ -509,9 +509,9 @@ class Cell(Network):
             stoichiometry[self.genes[target]] = -1
 
         # define propensity
-        assert actuator in self.proteins.keys(), 'Actuator not recognized.'
+        assert sensor in self.proteins.keys(), 'Sensor not recognized.'
         propensity = np.zeros(self.N, dtype=np.int64)
-        propensity[self.proteins[actuator]] = 1
+        propensity[self.proteins[sensor]] = 1
 
         # define reaction
         rxn = MassAction(stoichiometry,
@@ -521,8 +521,7 @@ class Cell(Network):
                          temperature_sensitive=temperature_sensitive,
                          atp_sensitive=atp_sensitive,
                          ribosome_sensitive=ribosome_sensitive,
-                         labels=labels,
-                         **kwargs)
+                         labels=labels)
 
         # add reaction
         self.reactions.append(rxn)

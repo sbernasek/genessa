@@ -289,9 +289,6 @@ cdef class cTranscription:
         self.inputs = array('I', inputs)
         self.input_dependence = array('d', input_dependence)
 
-        # initialize rate vector
-        self.rates = array('d', np.zeros(M, dtype=np.float64))
-
     @staticmethod
     cdef cTranscription get_blank_cTranscription(unsigned int M):
         """ Returns blank cTranscription instance. """

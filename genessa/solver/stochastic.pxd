@@ -39,7 +39,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef void ssa(self,
         cSignalType signal,
         double duration,
-        double dt) nogil
+        double dt) with gil
 
     cdef void fire_reaction(self,
         unsigned int rxn,
@@ -50,6 +50,9 @@ cdef class cStochasticSystem(cDeterministicSystem):
         unsigned int *states,
         double *cumulative,
         double tau) nogil
+
+    cdef void record_states(self,
+        unsigned int t_index) nogil
 
 
 # ======================== STANDALONE FUNCTIONS ===============================

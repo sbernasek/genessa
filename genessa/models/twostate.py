@@ -137,13 +137,13 @@ class TwoStateCell(Cell):
         # add reaction
         self.reactions.append(rxn)
 
-      def add_transcriptional_repressor(self,
-                                        actuator,
-                                        target,
-                                        k=1.,
-                                        atp_sensitive=True,
-                                        ribosome_sensitive=True,
-                                        labels={}):
+    def add_transcriptional_repressor(self,
+                                    actuator,
+                                    target,
+                                    k=1.,
+                                    atp_sensitive=True,
+                                    ribosome_sensitive=True,
+                                    labels={}):
         """
         Add transcriptional repressor.
 
@@ -164,16 +164,16 @@ class TwoStateCell(Cell):
         """
 
         # define reaction name
-        labels['name'] = gene+' repression'
+        labels['name'] = target+' repression'
 
         # define stoichiometry
-        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
-        stoichiometry[self.on_states[gene]] = -1
-        stoichiometry[self.off_states[gene]] = 1
+        stoichiometry = np.zeros(self.N, dtype=np.int64)
+        stoichiometry[self.on_states[target]] = -1
+        stoichiometry[self.off_states[target]] = 1
 
         # define propensity
-        propensity = np.zeros(self.nodes.size, dtype=np.int64)
-        propensity[self.on_states[gene]] = 1
+        propensity = np.zeros(self.N, dtype=np.int64)
+        propensity[self.on_states[target]] = 1
         input_dependence = np.zeros(self.I, dtype=np.int64)
         if 'IN' in actuator:
             if '_' in actuator:
