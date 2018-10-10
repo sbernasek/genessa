@@ -12,11 +12,14 @@ cdef class cStochasticSystem(cDeterministicSystem):
     # attributes
     cdef bint integrate
     cdef bint null_input
-    cdef array rstates
+    cdef array samples
     cdef unsigned int *rxn_order
     cdef unsigned int *states
     cdef double *inputs
     cdef double *cumulative
+    cdef double sampling_interval
+    cdef unsigned int sample_index
+    cdef double sample_time
 
     # methods
     cdef void allocate_memory(self)
@@ -34,12 +37,12 @@ cdef class cStochasticSystem(cDeterministicSystem):
         double[:] integrator_ic,
         cSignalType signal,
         double duration=*,
-        double dt=*)
+        double sampling_interval=*)
 
     cdef void ssa(self,
         cSignalType signal,
         double duration,
-        double dt) with gil
+        double sampling_interval) with gil
 
     cdef void fire_reaction(self,
         unsigned int rxn,
@@ -51,8 +54,10 @@ cdef class cStochasticSystem(cDeterministicSystem):
         double *cumulative,
         double tau) nogil
 
-    cdef void record_states(self,
-        unsigned int t_index) nogil
+    cdef void sample(self) nogil
+
+    cdef void record(self,
+        double end_time) with gil
 
 
 # ======================== STANDALONE FUNCTIONS ===============================

@@ -17,7 +17,7 @@ from .deterministic cimport cDeterministicSystem
 from ..parameters import conditions
 from ..signals.signals import cSignal
 from .rates import Rates
-from .timeseries import TimeSeries
+from ..timeseries.timeseries import TimeSeries
 
 
 # ============================= CYTHON CODE ===================================

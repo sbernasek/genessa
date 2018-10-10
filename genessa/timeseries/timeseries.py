@@ -3,18 +3,29 @@ from scipy.stats import norm
 import matplotlib.pyplot as plt
 
 
-class TimeSeries():
+class TimeSeries:
     """
     Class defines a collection of time series.
+
+    Attributes:
+
+        t (np.ndarray[double]) - timepoints
+
+        states (np.ndarray[int]) - state values, shape (num_trials, N, t)
+
+        mean (np.ndarray[double]) - mean across trajectories, shape (N, t)
+
+        var (np.ndarray[double]) - variance across trajectories, shape (N, t)
+
     """
 
     def __init__(self, times, states):
         """
         Args:
 
-            times (np.ndarray) - 1xt vector of timepoints
+            t (np.ndarray[double]) - timepoints
 
-            states (np.ndarray) - num_trials x N x t array of state values
+            states (np.ndarray[int]) - state values, shape (num_trials, N, t)
 
         """
         self.t = times
@@ -206,6 +217,17 @@ class TimeSeries():
 class GaussianModel(TimeSeries):
     """
     Class inherits a time series and fits a gaussian parametric model.
+
+    Inherited Attributes:
+
+        t (np.ndarray[double]) - timepoints
+
+        states (np.ndarray[int]) - state values, shape (num_trials, N, t)
+
+        mean (np.ndarray[double]) - mean across trajectories, shape (N, t)
+
+        var (np.ndarray[double]) - variance across trajectories, shape (N, t)
+
     """
 
     def __init__(self, t, mean, var, states=None):
@@ -223,7 +245,10 @@ class GaussianModel(TimeSeries):
 
     @staticmethod
     def from_timeseries(timeseries):
-        return GaussianModel(t=timeseries.t, mean=timeseries.mean, var=timeseries.var, states=timeseries.states)
+        return GaussianModel(t=timeseries.t,
+                             mean=timeseries.mean,
+                             var=timeseries.var,
+                             states=timeseries.states)
 
     @staticmethod
     def from_json(js):
