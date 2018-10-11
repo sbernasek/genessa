@@ -20,6 +20,7 @@ from operator import add
 
 # cython intra-package imports
 from ..kinetics.massaction cimport cMassAction
+from ..kinetics.feedback cimport cFeedBack
 from ..kinetics.control cimport cPController, cIController
 from ..kinetics.hill cimport cHill
 from ..kinetics.marbach cimport cTranscription
@@ -56,6 +57,8 @@ cdef class cRates:
 
         massaction (cMassAction) - mass action reaction object
 
+        feedback (cFeedBack) - linear feedback reaction object
+
         transcription (cTranscription) - transcription reaction object
 
         hill (cHill) - hill reaction object
@@ -82,6 +85,7 @@ cdef class cRates:
     def __cinit__(self,
                  cCoupling coupling,
                  cMassAction massaction,
+                 cFeedBack feedback,
                  cTranscription transcription,
                  cHill hill,
                  cIController icontrol,
@@ -97,6 +101,7 @@ cdef class cRates:
         # store rate objects
         self.coupling = coupling
         self.massaction = massaction
+        self.feedback = feedback
         self.transcription = transcription
         self.hill = hill
         self.icontrol = icontrol
@@ -156,10 +161,10 @@ cdef class cRates:
             self.rates[i] = 0.
 
     cdef double evaluate_rxn_rate(self,
-                                 unsigned int rxn,
-                                 unsigned int *states,
-                                 double *inputs,
-                                 double *cumulative) nogil:
+        unsigned int rxn,
+        unsigned int *states,
+        double *inputs,
+        double *cumulative) nogil:
         """
         Evaluates and returns rate for specified reaction.
 
@@ -191,15 +196,18 @@ cdef class cRates:
             rate = self.massaction.evaluate_rxn_rate(key, states, inputs)
 
         elif rxn_type == 2:
-            rate = self.transcription.evaluate_rxn_rate(key)
+            rate = self.feedback.evaluate_rxn_rate(key, states, inputs)
 
         elif rxn_type == 3:
-            rate = self.hill.evaluate_rxn_rate(key, states, inputs)
+            rate = self.transcription.evaluate_rxn_rate(key)
 
         elif rxn_type == 4:
-            rate = self.icontrol.evaluate_rxn_rate(key, cumulative)
+            rate = self.hill.evaluate_rxn_rate(key, states, inputs)
 
         elif rxn_type == 5:
+            rate = self.icontrol.evaluate_rxn_rate(key, cumulative)
+
+        elif rxn_type == 6:
             rate = self.pcontrol.evaluate_rxn_rate(key, states)
 
         return rate
@@ -395,12 +403,14 @@ cdef class cRates:
             elif rxn_type == 1:
                 rate = self.massaction.c_evaluate_rate(key, &states[0], &inputs[0])
             elif rxn_type == 2:
-                rate = self.transcription.c_evaluate_rate(key, &states[0])
+                rate = self.feedback.c_evaluate_rate(key, &states[0], &inputs[0])
             elif rxn_type == 3:
-                rate = self.hill.c_evaluate_rate(key, &states[0], &inputs[0])
+                rate = self.transcription.c_evaluate_rate(key, &states[0])
             elif rxn_type == 4:
-                rate = self.icontrol.c_evaluate_rate(key, &cumulative[0])
+                rate = self.hill.c_evaluate_rate(key, &states[0], &inputs[0])
             elif rxn_type == 5:
+                rate = self.icontrol.c_evaluate_rate(key, &cumulative[0])
+            elif rxn_type == 6:
                 rate = self.pcontrol.c_evaluate_rate(key, &states[0])
             else:
                 pass
@@ -613,6 +623,7 @@ class Rates:
 
         coupling = []
         massaction = []
+        feedback = []
         transcription = []
         hill = []
         icontrol = []
@@ -622,32 +633,36 @@ class Rates:
 
         for rxn in network.reactions:
 
-            if rxn.__class__.__name__ == 'Coupling':
+            if rxn.type == 'Coupling':
                 rxn_types.append(0)
                 coupling.append(rxn)
 
-            elif rxn.__class__.__name__ == 'MassAction':
+            elif rxn.type == 'MassAction':
                 rxn_types.append(1)
                 massaction.append(rxn)
 
-            elif rxn.__class__.__name__ == 'Transcription':
+            elif rxn.type == 'LinearFeedback':
                 rxn_types.append(2)
+                feedback.append(rxn)
+
+            elif rxn.type == 'Transcription':
+                rxn_types.append(3)
                 transcription.append(rxn)
 
-            elif rxn.__class__.__name__ == 'Hill':
-                rxn_types.append(3)
+            elif rxn.type == 'Hill':
+                rxn_types.append(4)
                 hill.append(rxn)
 
-            elif rxn.__class__.__name__ == 'IntegralController':
-                rxn_types.append(4)
+            elif rxn.type == 'IntegralController':
+                rxn_types.append(5)
                 icontrol.append(rxn)
 
-            elif rxn.__class__.__name__ == 'ProportionalController':
-                rxn_types.append(5)
+            elif rxn.type == 'ProportionalController':
+                rxn_types.append(6)
                 pcontrol.append(rxn)
 
             else:
-                raise ValueError('{} reaction type not recognized.'.format(rxn.__class__.__name__))
+                raise ValueError('{} reaction type not recognized.'.format(rxn.type))
 
         # get edge map
         edge_map = cls.get_rxn_map(network, maptype='edges')
@@ -661,6 +676,7 @@ class Rates:
         # get rate objects
         coupling = cCoupling.from_list(coupling, edge_map, repressor_map)
         massaction = cMassAction.from_list(massaction)
+        feedback = cFeedBack.from_list(feedback)
         transcription = cTranscription.from_list(transcription, modules_map)
         hill = cHill.from_list(hill)
         icontrol = cIController.from_list(icontrol)
@@ -678,6 +694,7 @@ class Rates:
         # instantiate cReactions object
         return cRates(coupling,
                      massaction,
+                     feedback,
                      transcription,
                      hill,
                      icontrol,
@@ -707,7 +724,6 @@ class Rates:
 
             maptype (str) - type of rxn map
 
-
         Returns:
 
             adict (dict) - {state: index} pairs
@@ -715,7 +731,7 @@ class Rates:
         """
 
         if maptype == 'propensity':
-            p_dict = cls.get_propensity_dict(network)
+            p_dict = cls.get_propensity_dependence_dict(network)
         elif maptype == 'repressors':
             p_dict = cls.get_repressor_dependence_dict(network)
         elif maptype == 'edges':
@@ -758,9 +774,18 @@ class Rates:
     def get_module_dependence_dict(network):
         """
         Returns dictionary where keys are states and values are lists of  module indices whose occupancies depend upon each state.
+
+        Args:
+
+            network (Network derivative)
+
+        Returns:
+
+            adict (dict) - {state index: <list of modules>}
+
         """
         adict = {i: [] for i in range(network.nodes.size)}
-        rxns = [rxn for rxn in network.reactions if rxn.__class__.__name__=='Transcription']
+        rxns = [rxn for rxn in network.reactions if rxn.type=='Transcription']
 
         if len(rxns) > 0:
             # store index of module i whose occupancy depends on state s
@@ -775,9 +800,18 @@ class Rates:
     def get_edge_dict(network):
         """
         Returns dictionary where keys are states and values are lists of edge indices whose occupancies depend upon each state.
+
+        Args:
+
+            network (Network derivative)
+
+        Returns:
+
+            adict (dict) - {state index: <list of edge indices>}
+
         """
         adict = {i: [] for i in range(network.nodes.size)}
-        rxns = [rxn for rxn in network.reactions if rxn.__class__.__name__=='Coupling']
+        rxns = [rxn for rxn in network.reactions if rxn.type=='Coupling']
 
         # store index of edge whose activity depends on state
         if len(rxns) > 0:
@@ -787,9 +821,18 @@ class Rates:
         return adict
 
     @staticmethod
-    def get_propensity_dict(network):
+    def get_propensity_dependence_dict(network):
         """
         Returns dictionary where keys are states and values are lists of  reaction indices whose propensities depend upon each state.
+
+        Args:
+
+            network (Network derivative)
+
+        Returns:
+
+            adict (dict) - {state index: <list of reaction indices>}
+
         """
         adict = {i: [] for i in range(network.nodes.size)}
         for (i, rxn) in enumerate(network.reactions):
@@ -798,15 +841,19 @@ class Rates:
             for s in rxn.propensity.nonzero()[0]:
                 adict[s].append(i)
 
+            # store index of reaction i whose target is state s
+            if rxn.type == 'LinearFeedback':
+                for s in rxn.targets:
+                    adict[s].append(i)
+
             # store index of reaction i whose repression depends on state s
-            rxn_type = rxn.__class__.__name__
-            if rxn_type in ('Hill', 'Coupling'):
+            elif rxn.type in ('Hill', 'Coupling'):
                 for repressor in rxn.repressors:
                     for s in repressor.active_species:
                         adict[s].append(i)
 
             # store index of reaction i whose transcription depends on state s
-            elif rxn_type == 'Transcription':
+            elif rxn.type == 'Transcription':
                 for module in rxn.modules:
                     for s in module.modifiers:
                         adict[s].append(i)
@@ -815,13 +862,23 @@ class Rates:
 
     @staticmethod
     def get_input_map(network):
-        """ Map inputs to reactions. """
+        """
+        Map signal dimensions to reactions.
+
+        Args:
+
+            network (Network derivative)
+
+        Returns:
+
+            adict (dict) - {signal index: <list of reaction indices>}
+
+        """
         adict = {i: [] for i in range(network.I)}
         for (j, rxn) in enumerate(network.reactions):
-            rxn_type = rxn.__class__.__name__
-            if rxn_type in ('Coupling', 'SumReaction', 'ProportionalController', 'IntegralController'):
+            if rxn.type in ('Coupling', 'SumReaction', 'ProportionalController', 'IntegralController'):
                 continue
-            elif rxn_type == 'Transcription':
+            elif rxn.type == 'Transcription':
                 if rxn.perturbed == True:
                     adict[0].append(j)
             else:
@@ -831,11 +888,21 @@ class Rates:
 
     @staticmethod
     def get_perturbation_map(network):
-        """ Map signal dimensions to perturbed reactions. """
+        """
+        Map signal dimensions to perturbed reactions.
+
+        Args:
+
+            network (Network derivative)
+
+        Returns:
+
+            adict (dict) - {signal index: <list of reaction indices>}
+
+        """
         adict = {i: [] for i in range(network.I)}
         for (j, rxn) in enumerate(network.reactions):
-            rxn_type = rxn.__class__.__name__
-            if rxn_type == 'Transcription':
+            if rxn.type == 'Transcription':
                 if rxn.perturbed == True:
                     adict[0].append(j)
         return adict

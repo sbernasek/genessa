@@ -192,7 +192,7 @@ cdef class cRegulatoryModule:
                                 double *states,
                                 unsigned int mod) nogil:
         """
-        Evaluates and returns activation of specified regulatory module.
+        Evaluates and returns activation of specified regulatory module. Accepts states as 'double' type as opposed to the "evaluate_rxn_rate" method which only accepts states with an 'unsigned int' type. This function serves as an interface for the scipy.integrate ODE solvers used for deterministic simulations.
 
         Args:
 

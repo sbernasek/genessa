@@ -123,7 +123,7 @@ cdef class cSDRepressor(cSpeciesDependent):
                                double *states,
                                unsigned int rep) nogil:
         """
-        Evaluate and return occupancy by specified repressor.
+        Evaluate and return occupancy by specified repressor. Accepts states as 'double' type. This function serves as an interface for the scipy.integrate ODE solvers used for deterministic simulations.
 
         Args:
 
@@ -350,7 +350,7 @@ cdef class cCoupling(cSpeciesDependent):
                                 unsigned int rxn,
                                 double *states) nogil:
         """
-        Evaluates and returns rate of specified reaction.
+        Evaluates and returns rate of specified reaction. Accepts states as 'double' type. This function serves as an interface for the scipy.integrate ODE solvers used for deterministic simulations.
 
         Args:
 

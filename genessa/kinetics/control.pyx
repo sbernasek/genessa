@@ -80,7 +80,7 @@ cdef class cPController(cSpeciesDependent):
                                 unsigned int rxn,
                                 double *controlled) nogil:
         """
-        Evaluates and returns rate of specified reaction.
+        Evaluates and returns rate of specified reaction. Accepts states as 'double' type as opposed to the "evaluate_rxn_rate" method which only accepts states with an 'unsigned int' type. This function serves as an interface for the scipy.integrate ODE solvers used for deterministic simulations.
 
         Args:
 
@@ -211,7 +211,7 @@ cdef class cIController(cSpeciesDependent):
                                 unsigned int rxn,
                                 double *controlled) nogil:
         """
-        Evaluates and returns rate of specified reaction.
+        Evaluates and returns rate of specified reaction. Accepts states as 'double' type as opposed to the "evaluate_rxn_rate" method which only accepts states with an 'unsigned int' type. This function serves as an interface for the scipy.integrate ODE solvers used for deterministic simulations.
 
         Args:
 

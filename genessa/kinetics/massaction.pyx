@@ -33,7 +33,18 @@ cdef class cMassAction(cInputDependent):
 
     @staticmethod
     cdef cMassAction from_list(list rxns):
-        """ Instantiate from list of reactions. """
+        """
+        Instantiate from list of reactions.
+
+        Args:
+
+            rxns (list) - MassAction objects
+
+        Returns:
+
+            massaction (cMassAction)
+
+        """
 
         cdef unsigned int M
         cdef np.ndarray k
@@ -53,10 +64,13 @@ cdef class cMassAction(cInputDependent):
         species = np.hstack([rxn.active_species for rxn in rxns]).astype(np.uint32)
         species_dependence = np.hstack([rxn._propensity for rxn in rxns])
         species_dependence = species_dependence.astype(np.float64)
+
+        # get input dependence
         inputs_ind = np.cumsum([0]+[rxn.num_active_inputs for rxn in rxns]).astype(np.uint32)
         inputs = np.hstack([rxn.active_inputs for rxn in rxns]).astype(np.uint32)
         input_dependence = np.hstack([rxn._input_dependence for rxn in rxns])
         input_dependence = input_dependence.astype(np.float64)
+
         return cMassAction(M, k, species_ind, species, species_dependence, inputs_ind, inputs, input_dependence)
 
     cdef double evaluate_rxn_rate(self,
@@ -94,7 +108,7 @@ cdef class cMassAction(cInputDependent):
                                 double *states,
                                 double *inputs) nogil:
         """
-        Evaluates and returns rate of specified reaction.
+        Evaluates and returns rate of specified reaction. Accepts states as 'double' type as opposed to the "evaluate_rxn_rate" method which only accepts states with an 'unsigned int' type. This function serves as an interface for the scipy.integrate ODE solvers used for deterministic simulations.
 
         Args:
 

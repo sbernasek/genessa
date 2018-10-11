@@ -5,6 +5,7 @@ from copy import copy
 # intra-package python imports
 from ..networks.networks import Network
 from ..kinetics.massaction import MassAction
+from ..kinetics.feedback import LinearFeedback
 from ..kinetics.hill import Hill
 from .genes import Gene
 
@@ -39,10 +40,7 @@ class Cell(Network):
 
     """
 
-    def __init__(self,
-                 genes=(),
-                 I=1,
-                 **kwargs):
+    def __init__(self, genes=(), I=1, **kwargs):
         """
         Instantiate cell with one or more protein coding genes.
 
@@ -136,13 +134,13 @@ class Cell(Network):
         self.proteins.update({k: v+shift for k,v in gene.proteins.items()})
 
     def add_phosphorylation(self,
-                            base,
-                            kf=1.,
-                            Kf=1.,
-                            kr=1.,
-                            Kr=1.,
-                            g=0.,
-                            name=None):
+        base,
+        kf=1.,
+        Kf=1.,
+        kr=1.,
+        Kr=1.,
+        g=0.,
+        name=None):
         """
         Add phosphorylated protein product.
 
@@ -215,12 +213,12 @@ class Cell(Network):
         self.reactions.extend(rxns)
 
     def add_dimer(self,
-                  p1,
-                  p2,
-                  kf=1.,
-                  kr=1.,
-                  g=1.,
-                  name=None):
+        p1,
+        p2,
+        kf=1.,
+        kr=1.,
+        g=1.,
+        name=None):
         """
         Add dimerization product.
 
@@ -270,11 +268,11 @@ class Cell(Network):
         self.reactions.extend(rxns)
 
     def add_translocation(self,
-                          base,
-                          kf=1.,
-                          kr=1.,
-                          g=1.,
-                          name=None):
+        base,
+        kf=1.,
+        kr=1.,
+        g=1.,
+        name=None):
         """
         Add translocation product.
 
@@ -323,14 +321,14 @@ class Cell(Network):
         self.reactions.extend(rxns)
 
     def add_transcript_degradation(self,
-                                   actuator,
-                                   target,
-                                   k=1.,
-                                   Kd=1.,
-                                   temperature_sensitive=True,
-                                   atp_sensitive=True,
-                                   ribosome_sensitive=True,
-                                   labels={}):
+        actuator,
+        target,
+        k=1.,
+        Kd=1.,
+        temperature_sensitive=True,
+        atp_sensitive=True,
+        ribosome_sensitive=True,
+        labels={}):
         """
         Add transcript degradation term based on Michaelis Menten kinetics.
 
@@ -388,15 +386,15 @@ class Cell(Network):
         self.reactions.append(rxn)
 
     def add_protein_degradation(self,
-                                actuator,
-                                target,
-                                k=1.,
-                                Kd=1.,
-                                modulation=None,
-                                temperature_sensitive=True,
-                                atp_sensitive=True,
-                                ribosome_sensitive=True,
-                                labels={}):
+        actuator,
+        target,
+        k=1.,
+        Kd=1.,
+        modulation=None,
+        temperature_sensitive=True,
+        atp_sensitive=True,
+        ribosome_sensitive=True,
+        labels={}):
         """
         Add protein degradation term based on Michaelis Menten kinetics.
 
@@ -463,14 +461,14 @@ class Cell(Network):
         self.reactions.append(rxn)
 
     def add_linear_feedback(self,
-                            sensor,
-                            target,
-                            mode='protein',
-                            k=1.,
-                            temperature_sensitive=True,
-                            atp_sensitive=True,
-                            ribosome_sensitive=True,
-                            labels={}):
+        sensor,
+        target,
+        mode='protein',
+        k=1.,
+        temperature_sensitive=True,
+        atp_sensitive=True,
+        ribosome_sensitive=True,
+        labels={}):
         """
         Add linear feedback term.
 
@@ -514,14 +512,14 @@ class Cell(Network):
         propensity[self.proteins[sensor]] = 1
 
         # define reaction
-        rxn = MassAction(stoichiometry,
-                         propensity=propensity,
-                         input_dependence=None,
-                         k=k,
-                         temperature_sensitive=temperature_sensitive,
-                         atp_sensitive=atp_sensitive,
-                         ribosome_sensitive=ribosome_sensitive,
-                         labels=labels)
+        rxn = LinearFeedback(stoichiometry,
+            propensity=propensity,
+            input_dependence=None,
+            k=k,
+            temperature_sensitive=temperature_sensitive,
+            atp_sensitive=atp_sensitive,
+            ribosome_sensitive=ribosome_sensitive,
+            labels=labels)
 
         # add reaction
         self.reactions.append(rxn)

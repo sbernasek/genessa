@@ -20,19 +20,29 @@ from .base import Reaction
 cdef class cIDRepressor(cInputDependent):
 
     def __init__(self,
-                 unsigned int M,
-                 double[:] k_m,
-                 double[:] n,
-                 unsigned int[:] species_ind,
-                 unsigned int[:] species,
-                 double[:] species_dependence,
-                 unsigned int[:] inputs_ind,
-                 unsigned int[:] inputs,
-                 double[:] input_dependence):
+        unsigned int M,
+        double[:] k_m,
+        double[:] n,
+        unsigned int[:] species_ind,
+        unsigned int[:] species,
+        double[:] species_dependence,
+        unsigned int[:] inputs_ind,
+        unsigned int[:] inputs,
+        double[:] input_dependence):
 
         # add input/species dependence
         vmax = array('d', np.ones(M, dtype=np.uint32))
-        cInputDependent.__init__(self, M, vmax, species_ind, species, species_dependence, inputs_ind, inputs, input_dependence)
+        super().__init__(
+            M,
+            vmax,
+            species_ind,
+            species,
+            species_dependence,
+            inputs_ind,
+            inputs,
+            input_dependence)
+
+        # add rate constants
         self.k_m = array('d', k_m)
         self.n = array('d', n)
 
@@ -125,7 +135,7 @@ cdef class cIDRepressor(cInputDependent):
                                double *inputs,
                                unsigned int rep) nogil:
         """
-        Evaluates and returns occupancy of specified repressor.
+        Evaluates and returns occupancy of specified repressor. Accepts states as 'double' type as opposed to the "get_occupancy" method which only accepts states with an 'unsigned int' type. This function serves as an interface for the scipy.integrate ODE solvers used for deterministic simulations.
 
         Args:
 
@@ -178,29 +188,39 @@ cdef class cHill(cIDRepressor):
 
 
     def __init__(self,
-                 unsigned int M,
-                 double[:] vmax,
-                 double[:] k_m,
-                 double[:] n,
-                 unsigned int[:] species_ind,
-                 unsigned int[:] species,
-                 double[:] species_dependence,
-                 unsigned int[:] inputs_ind,
-                 unsigned int[:] inputs,
-                 double[:] input_dependence,
+            unsigned int M,
+            double[:] vmax,
+            double[:] k_m,
+            double[:] n,
+            unsigned int[:] species_ind,
+            unsigned int[:] species,
+            double[:] species_dependence,
+            unsigned int[:] inputs_ind,
+            unsigned int[:] inputs,
+            double[:] input_dependence,
 
-                 cIDRepressor repressor_obj,
-                 unsigned int[:] repressors_ind):
+            cIDRepressor repressor_obj,
+            unsigned int[:] repressors_ind):
 
         # add input/species dependence
-        cInputDependent.__init__(self, M, vmax, species_ind, species, species_dependence, inputs_ind, inputs, input_dependence)
+        cInputDependent.__init__(self,
+             M,
+             vmax,
+             species_ind,
+             species,
+             species_dependence,
+             inputs_ind,
+             inputs,
+             input_dependence)
+
         self.k_m = array('d', k_m)
         self.n = array('d', n)
 
         # add repressor data
         self.rep_obj = repressor_obj
         self.repressors_ind = array('I', repressors_ind)
-        self.n_repressors = array('I', np.diff(repressors_ind).astype(np.uint32))
+        n_repressors = np.diff(repressors_ind).astype(np.uint32)
+        self.n_repressors = array('I', n_repressors)
 
     @staticmethod
     cdef cHill get_blank_cHill():
@@ -338,7 +358,7 @@ cdef class cHill(cIDRepressor):
                                 double *states,
                                 double *inputs) nogil:
         """
-        Evaluates and returns rate of specified reaction.
+        Evaluates and returns rate of specified reaction. Accepts states as 'double' type as opposed to the "evaluate_rxn_rate" method which only accepts states with an 'unsigned int' type. This function serves as an interface for the scipy.integrate ODE solvers used for deterministic simulations.
 
         Args:
 

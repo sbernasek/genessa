@@ -240,6 +240,9 @@ ext_modules =[
     # mass action kinetics
     declare_extension("genessa.kinetics.massaction", ext_type, dirs),
 
+    # linear feedback kinetics
+    declare_extension("genessa.kinetics.feedback", ext_type, dirs),
+
     # hill kinetics
     declare_extension("genessa.kinetics.hill", ext_type, dirs),
 

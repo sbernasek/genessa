@@ -3,6 +3,7 @@ from cpython.array cimport array
 
 # cython intra-package imports
 from ..kinetics.massaction cimport cMassAction
+from ..kinetics.feedback cimport cFeedBack
 from ..kinetics.control cimport cPController, cIController
 from ..kinetics.hill cimport cHill
 from ..kinetics.marbach cimport cTranscription
@@ -23,6 +24,7 @@ cdef class cRates:
     # reaction object attributes
     cdef cCoupling coupling
     cdef cMassAction massaction
+    cdef cFeedBack feedback
     cdef cTranscription transcription
     cdef cHill hill
     cdef cIController icontrol
