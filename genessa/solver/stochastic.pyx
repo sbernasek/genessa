@@ -299,7 +299,10 @@ cdef class cStochasticSystem(cDeterministicSystem):
                                             rxn)
 
             # if total rate is zero, keep stepping until input changes
-            if self.R.total_rate == 0:
+            if self.R.total_rate <= 0:
+
+                # set to zero (mitigates floating point error)
+                self.R.total_rate = 0
 
                 # if there is no input, jump to end
                 if self.null_input == 1:
@@ -331,6 +334,9 @@ cdef class cStochasticSystem(cDeterministicSystem):
                              self.M,
                              self.R.total_rate,
                              rfloat)
+
+            #print(self.R.total_rate, self.states[2])
+
 
             # fire reaction
             self.fire_reaction(rxn, 1, self.states)
