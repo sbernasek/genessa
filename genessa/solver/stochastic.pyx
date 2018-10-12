@@ -7,7 +7,7 @@ from .stochastic cimport cStochasticSystem, choose_rxn, evaluate_timestep
 
 # python intra-package imports
 from .deterministic import DeterministicSimulation
-from ..timeseries.timeseries import TimeSeries
+from ..timeseries.base import TimeSeries
 
 # cython external imports
 from libc.stdlib cimport rand, RAND_MAX

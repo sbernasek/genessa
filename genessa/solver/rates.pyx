@@ -321,9 +321,13 @@ cdef class cRates:
             fired (unsigned int) - index of reaction that fired
 
         """
+
+        # update edges and regulatory modules
         self.coupling.update_edges(states, fired)
         self.coupling.rep_obj.update(states, fired)
         self.transcription.modules_obj.update(states, fired)
+
+        # update reaction rates
         self.rxn_map.app(self,
                          fired,
                          self.update_rxn_rate,
