@@ -95,7 +95,7 @@ class RateLaws:
         self.table.append([name, reactants, products, rate_law, rate_constant])
 
         # add any repressors for Hill and Coupling reactions
-        if rxn.__class__.__name__ in ('Hill', 'Coupling'):
+        if rxn.type in ('Hill', 'Coupling'):
             for repressor in rxn.repressors:
                 repressor_name = 'Repression of ' + rxn.name
                 rate_law = self.get_enzymatic_rate_law(repressor)
@@ -188,22 +188,20 @@ class RateLaws:
         """
 
         # get reaction type
-        rxn_type = rxn.__class__.__name__
-
-        if rxn_type == 'MassAction':
+        if rxn.type in ('MassAction', 'LinearFeedback'):
             rate_expression = self.get_mass_action_rate_law(rxn)
 
-        elif rxn_type == 'Hill':
+        elif rxn.type == 'Hill':
             rate_expression = self.get_enzymatic_rate_law(rxn)
 
-        elif rxn_type == 'SumReaction':
+        elif rxn.type == 'SumReaction':
             rate_expression = self.get_sum_rxn_rate_law(rxn)
 
-        elif rxn_type == 'Coupling':
+        elif rxn.type == 'Coupling':
             rate_expression = self.get_coupling_rate_law(rxn)
 
         else:
-            rate_expression = 'Unknwon Rxn'
+            rate_expression = 'Unknown Rxn Type'
 
         return rate_expression
 
@@ -224,7 +222,7 @@ class RateLaws:
 
         rate_constant = '{:2.5f}'.format(rxn.k[0])
 
-        if rxn.__class__.__name__ == 'Hill':
+        if rxn.type == 'Hill':
             for i, coeff in enumerate(rxn.rate_modifier):
                 if coeff != 0:
                     rate_constant += ' + {:0.1f}[IN_{:d}]'.format(coeff, i)

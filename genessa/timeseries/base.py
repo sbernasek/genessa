@@ -163,7 +163,7 @@ class TimeSeries:
             mkdir(path)
 
         # save trajectories
-        np.save(join(path, 'times.npy'), self.states)
+        np.save(join(path, 'times.npy'), self.t)
         np.save(join(path, 'states.npy'), self.states)
 
     def evaluate_quantile(self, q):

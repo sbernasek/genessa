@@ -1,5 +1,6 @@
 import numpy as np
 from copy import deepcopy
+import pickle
 
 # intra-package python imports
 from .ratelaws import RateLaws
@@ -71,6 +72,36 @@ class Network:
     def M(self):
         """ Number of reactions. """
         return len(self.reactions)
+
+    @staticmethod
+    def load(path):
+        """
+        Load network from file.
+
+        Args:
+
+            path (str) - file path
+
+        Returns:
+
+            network (Network derivative)
+
+        """
+        with open(path, 'rb') as file:
+            network = pickle.load(file)
+        return network
+
+    def save(self, path):
+        """
+        Save network to file. Networks are saved as serialized pickle objects.
+
+        Args:
+
+            path (str) - save destination
+
+        """
+        with open(path, 'wb') as file:
+            pickle.dump(self, file, protocol=-1)
 
     def print_reactions(self):
         """ Print tabulated summary of reactions. """

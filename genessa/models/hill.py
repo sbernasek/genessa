@@ -153,5 +153,5 @@ class HillCell(Cell):
 
         # add repressor
         for rxn in self.reactions:
-            if rxn.__class__.__name__ == 'Hill' and target in rxn.name:
+            if rxn.type == 'Hill' and target in rxn.name:
                 rxn.add_repressor(repressor)
