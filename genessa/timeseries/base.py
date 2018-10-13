@@ -38,6 +38,11 @@ class TimeSeries:
         self.states = states
 
     @property
+    def N(self):
+        """ Number of state dimensions. """
+        return self.states.shape[1]
+
+    @property
     def mean(self):
         """ Mean value for each dimension at each timepoint. """
         return self.states.mean(axis=0)
@@ -57,7 +62,7 @@ class TimeSeries:
     @property
     def peaks(self):
         """ Maximum mean values for each dimension. """
-        return self.mean[:, self.peak_indices]
+        return self.mean[np.arange(self.N), self.peak_indices]
 
     @property
     def initial(self):
@@ -78,6 +83,52 @@ class TimeSeries:
     def upper(self):
         """ Upper bound of trajectories. """
         return self.states.max(axis=0)
+
+    @staticmethod
+    def _index(value, array):
+        """
+        Returns nearest indices of specified value in an array. Excludes endpoints.
+
+        Args:
+
+            value (float) - target value
+
+            array (np.ndarray[float]) - 1D vector of values
+
+        Returns:
+
+            indices (np.ndarray[int]) - indices of value in array
+
+        """
+        return np.diff(np.sign(array-np.ones(array.size)*value)).nonzero()[0]
+
+    def index(self, value, dim, mode='mean'):
+        """
+        Returns nearest indices of specified value in the specified array. Excludes endpoints.
+
+        Args:
+
+            value (float) - target value
+
+            dim (int) - state dimension to be indexed
+
+            mode (str) - array to be indexed, e.g. 'lower', 'mean', or 'upper'
+
+        Returns:
+
+            indices (np.ndarray[int]) - indices of value in specified array
+
+        """
+
+        # get array
+        if mode == 'mean':
+            array = self.mean[dim]
+        elif mode == 'lower':
+            array = self.lower[dim]
+        elif mode == 'upper':
+            array = self.upper[dim]
+
+        return self._index(value, array)
 
     @classmethod
     def load(cls, path):
@@ -115,13 +166,11 @@ class TimeSeries:
         np.save(join(path, 'times.npy'), self.states)
         np.save(join(path, 'states.npy'), self.states)
 
-    def evaluate_quantile(self, q, dim=-1):
+    def evaluate_quantile(self, q):
         """
         Returns specified quantile for a specified dimension.
 
         Args:
-
-            dim (int) - dimension of state space
 
             q (float) - quantile of distribution, 0 to 100
 
@@ -130,39 +179,7 @@ class TimeSeries:
             trajectory (np.ndarray) - time series for specified quantile
 
         """
-        return np.percentile(self.states[:, dim, :], q=q, axis=0)
-
-    def evaluate_time_to_reach_threshold(self,
-        threshold,
-        after_peak=True,
-        q=99,
-        dim=-1):
-        """
-        Returns time (and index in time vector) at which specified quantile of trajectory distribution first reaches a specified threshold value.
-
-        Args:
-
-            threshold (float) - target value
-
-            after_peak (bool) - if True, only consider times after the peak
-
-            q (float) - quantile of distribution, 0 to 100
-
-            dim (int) - dimension of state space
-
-        Returns:
-
-            index (int) - index of of timepoint
-
-            time (float) - time at which value occurs
-
-        """
-        index = 0
-        if after_peak:
-            index += self.peak_indices[dim]
-        trajectory = self.evaluate_quantile(q, dim)[index:]
-        index += (abs(trajectory-threshold)).argmin()
-        return index, self.t[index]
+        return np.percentile(self.states, q=q, axis=0)
 
     def get_deviations(self, values=None):
         """

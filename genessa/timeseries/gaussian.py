@@ -69,13 +69,11 @@ class GaussianModel(TimeSeries):
         """ Fits a gaussian across each dimension at each time point. """
         self.norm = norm(loc=self.mean, scale=np.sqrt(self.var))
 
-    def evaluate_quantile(self, q, dim=-1):
+    def evaluate_quantile(self, q):
         """
         Returns specified quantile for a specified dimension.
 
         Args:
-
-            dim (int) - dimension of state space
 
             q (float) - quantile of distribution, 0 to 100
 
@@ -86,7 +84,7 @@ class GaussianModel(TimeSeries):
         """
         return self.norm.ppf(q/100)
 
-    def evaluate_cdf(self, threshold, dim=-1):
+    def evaluate_cdf(self, threshold):
         """
         Returns CDF for a specified dimension at a specified threshold value.
 
@@ -94,12 +92,10 @@ class GaussianModel(TimeSeries):
 
             threshold (np.ndarray[float] or float) - threshold(s) values
 
-            dim (int) - state dimension
-
         Returns:
 
             cdf (np.ndarray[float]) - cdf values
 
         """
 
-        return self.norm.cdf(threshold)[dim]
+        return self.norm.cdf(threshold)
