@@ -10,7 +10,8 @@ from .deterministic import DeterministicSimulation
 from ..timeseries.base import TimeSeries
 
 # cython external imports
-from libc.stdlib cimport rand, RAND_MAX
+from libc.stdlib cimport rand, srand, RAND_MAX
+from libc.time cimport time
 from libc.math cimport ceil
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 cimport numpy as np
@@ -20,6 +21,10 @@ from cpython.array cimport array
 import numpy as np
 from array import array
 from types import FunctionType
+
+
+# seed random number generator
+srand(time(NULL))
 
 
 # ============================= CYTHON CODE ===================================
@@ -258,7 +263,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
         cdef unsigned int rxn = 0
         cdef double tau
 
-        # declare random number
+        # declare random float
         cdef double rfloat
 
         # initialize input
