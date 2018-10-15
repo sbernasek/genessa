@@ -206,6 +206,6 @@ class TimeSeries:
         self.states - values
 
         # construct new model
-        model = self.__class__(self.times, self.states-values)
+        model = self.__class__(self.t, self.states-values)
 
         return model
