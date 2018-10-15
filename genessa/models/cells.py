@@ -65,6 +65,22 @@ class Cell(Network):
         # add genes
         self.add_genes(genes, **kwargs)
 
+    @property
+    def ic(self):
+        """ Default initial condition. """
+        return np.zeros(self.N, dtype=np.int64)
+
+    def constrain_ic(self, ic):
+        """
+        Constrains initial condition.
+
+        Args:
+
+            ic (np.ndarray[double]) - initial condition
+
+        """
+        pass
+
     def get_ic(self, ic=None):
         """
         Get initial condition for cell.
@@ -328,7 +344,7 @@ class Cell(Network):
         temperature_sensitive=True,
         atp_sensitive=True,
         ribosome_sensitive=True,
-        labels={}):
+        **labels):
         """
         Add transcript degradation term based on Michaelis Menten kinetics.
 
@@ -394,7 +410,7 @@ class Cell(Network):
         temperature_sensitive=True,
         atp_sensitive=True,
         ribosome_sensitive=True,
-        labels={}):
+        **labels):
         """
         Add protein degradation term based on Michaelis Menten kinetics.
 
@@ -468,7 +484,7 @@ class Cell(Network):
         temperature_sensitive=True,
         atp_sensitive=True,
         ribosome_sensitive=True,
-        labels={}):
+        **labels):
         """
         Add linear feedback term.
 
@@ -495,7 +511,7 @@ class Cell(Network):
         """
 
         # assign labels
-        labels['name'] = 'FB on {:s}'.format(target)
+        labels['name'] = 'FB on {:s} {:s}'.format(target, mode)
 
         # define stoichiometry
         stoichiometry = np.zeros(self.N, dtype=np.int64)

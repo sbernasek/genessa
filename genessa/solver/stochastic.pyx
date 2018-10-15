@@ -242,7 +242,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef void ssa(self,
                     cSignalType signal,
                     double duration,
-                    double sampling_interval) with gil:
+                    double sampling_interval) nogil:
         """
         Run Gillespie SSA.
 
@@ -419,7 +419,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
         # increment sampling index
         self.sample_index += 1
 
-    cdef void record(self, double end_time) with gil:
+    cdef void record(self, double end_time) nogil:
         """
 
         Sample constant state levels until specified time.
@@ -445,7 +445,11 @@ class StochasticSimulation(DeterministicSimulation):
 
         solver (cStochasticSystem) - cython-based stochastic system
 
-    Inherited Attributes:
+    Inherited attributes:
+
+        network (Network) - python Network instance
+
+    Properties:
 
         N (unsigned int) - number of nodes
 
@@ -497,9 +501,12 @@ class StochasticSimulation(DeterministicSimulation):
 
         # cast initial condition to unsigned 32-bit integer
         if ic is None:
-            ic = np.zeros(self.N, dtype=np.uint32)
+            ic = self.network.ic.astype(np.uint32)
         else:
             ic = ic.astype(np.uint32)
+
+        # apply network constraints to initial condition
+        self.network.constrain_ic(ic)
 
         # cast integrator initial condition to 64-bit float
         if integrator_ic is None:
@@ -512,11 +519,12 @@ class StochasticSimulation(DeterministicSimulation):
         assert (integrator_ic.size==self.N), 'Wrong Integrator IC dimensions.'
 
         # run stochastic simulation
-        dynamics = self.solver.run(ic=ic,
-                                   integrator_ic=integrator_ic,
-                                   signal=signal,
-                                   duration=duration,
-                                   sampling_interval=dt)
+        dynamics = self.solver.run(
+            ic=ic,
+            integrator_ic=integrator_ic,
+            signal=signal,
+            duration=duration,
+            sampling_interval=dt)
 
         return dynamics
 

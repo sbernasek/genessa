@@ -131,13 +131,15 @@ class TimeSeries:
         return self._index(value, array)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, **kwargs):
         """
         Load from file.
 
         Args:
 
             path (str) - path to saved object
+
+            kwargs: keyword arguments for constructor
 
         Returns:
 
@@ -146,7 +148,7 @@ class TimeSeries:
         """
         times = np.load(join(path, 'times.npy'))
         states = np.load(join(path, 'states.npy'))
-        return cls(times, states)
+        return cls(times, states, **kwargs)
 
     def save(self, path):
         """

@@ -82,7 +82,7 @@ class LinearCell(Cell):
                         gene,
                         activator,
                         k=1,
-                        labels={}):
+                        **labels):
         """
         Add gene activation reaction.
 

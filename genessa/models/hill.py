@@ -41,7 +41,7 @@ class HillCell(Cell):
                           k_m=1,
                           n=1,
                           baseline=0.,
-                          labels={}):
+                          **labels):
         """
         Add transcript synthesis reaction.
 
@@ -109,7 +109,7 @@ class HillCell(Cell):
                                       target,
                                       k_m=1,
                                       n=1,
-                                      labels=None):
+                                      **labels):
         """
         Add transcriptional repressor.
 

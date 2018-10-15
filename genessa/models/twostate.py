@@ -16,6 +16,8 @@ class TwoStateCell(Cell):
 
         on_states (dict) - {name: node_id} pairs
 
+        dosage (int) - dosage of each gene (used to set initial conditions)
+
     Inherited Attributes:
 
         transcripts (dict) - {name: node_id} pairs
@@ -42,6 +44,7 @@ class TwoStateCell(Cell):
     def __init__(self,
                  genes=(),
                  I=1,
+                 dosage=2,
                  **kwargs):
         """
         Instantiate twostate cell with one or more protein coding genes.
@@ -52,12 +55,55 @@ class TwoStateCell(Cell):
 
             I (int) - number of input channels
 
+            dosage (int) - dosage of each gene (used to set initial conditions)
+
             kwargs: keyword arguments for add_genes
 
         """
         self.off_states = {}
         self.on_states = {}
+        self.dosage = dosage
         super().__init__(genes, I, **kwargs)
+
+    @property
+    def ic(self):
+        """ Default initial condition. """
+        ic = np.zeros(self.N, dtype=np.int64)
+        for off_state in self.off_states.values():
+            ic[off_state] = self.dosage
+        return ic
+
+    def constrain_ic(self, ic):
+        """
+        Constrains initial condition to specified gene dosage.
+
+        Args:
+
+            ic (np.ndarray[double]) - initial condition
+
+        """
+
+        for gene in self.off_states.keys():
+
+            # get current dosage specified by initial condition
+            off_state = self.off_states[gene]
+            on_state = self.on_states[gene]
+            currrent_dosage = ic[off_state] + ic[on_state]
+
+            # if dosage is correct, leave as is
+            if currrent_dosage == self.dosage:
+                continue
+
+            # if dosage is too low, add to the off state
+            elif currrent_dosage < self.dosage:
+                ic[off_state] += (self.dosage - currrent_dosage)
+
+            # if dosage is too high, remove from the on state first
+            while ic[off_state] + ic[on_state] > self.dosage:
+                if ic[on_state] > 0:
+                    ic[on_state] -= 1
+                else:
+                    ic[off_state] -= 1
 
     def add_gene(self, **kwargs):
         """
@@ -88,7 +134,7 @@ class TwoStateCell(Cell):
                         gene,
                         activator,
                         k=1,
-                        labels={}):
+                        **labels):
         """
         Add gene activation reaction.
 
@@ -143,7 +189,7 @@ class TwoStateCell(Cell):
                                     k=1.,
                                     atp_sensitive=True,
                                     ribosome_sensitive=True,
-                                    labels={}):
+                                    **labels):
         """
         Add transcriptional repressor.
 

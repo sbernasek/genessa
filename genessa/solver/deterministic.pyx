@@ -136,13 +136,17 @@ class DeterministicSimulation:
 
     Attributes:
 
+        network (Network) - python Network instance
+
+        solver (cDeterministicSystem) - cython-based deterministic system
+
+    Properties:
+
         N (unsigned int) - number of nodes
 
         M (unsigned int) - number of reactions
 
         I (unsigned int) - number of external inputs
-
-        solver (cDeterministicSystem) - cython-based deterministic system
 
     """
 
@@ -167,13 +171,26 @@ class DeterministicSimulation:
             else:
                 self.apply_rate_scaling(network, condition)
 
-        # store system dimensions
-        self.N = network.N
-        self.M = network.M
-        self.I = network.I
+        # store system
+        self.network = network
 
         # instantiate solver
         self.set_solver(network)
+
+    @property
+    def N(self):
+        """ Number of nodes in network. """
+        return self.network.N
+
+    @property
+    def M(self):
+        """ Number of reactions in network. """
+        return self.network.M
+
+    @property
+    def I(self):
+        """ Number of input channels in network. """
+        return self.network.I
 
     def set_solver(self, network):
         """
@@ -272,10 +289,13 @@ class DeterministicSimulation:
 
         # if no initial condition is provided, assume all states are zero
         if ic is None:
-            ic = np.zeros(self.N, dtype=np.float64)
+            ic = self.network.ic.astype(np.float64)
         else:
             ic = ic.astype(np.float64)
         assert (ic.size==self.N), 'Initial Condition is the wrong size.'
+
+        # apply network constraints to initial condition
+        self.network.constrain_ic(ic)
 
         # if no initial integrator condition is provided, assume zeros
         if integrator_ic is None:

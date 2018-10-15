@@ -42,7 +42,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef void ssa(self,
         cSignalType signal,
         double duration,
-        double sampling_interval) with gil
+        double sampling_interval) nogil
 
     cdef void fire_reaction(self,
         unsigned int rxn,
@@ -57,7 +57,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef void sample(self) nogil
 
     cdef void record(self,
-        double end_time) with gil
+        double end_time) nogil
 
 
 # ======================== STANDALONE FUNCTIONS ===============================

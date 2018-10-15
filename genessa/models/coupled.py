@@ -45,7 +45,7 @@ class CoupledCell(Cell):
                           rep=None,
                           k_m=1,
                           n=1,
-                          labels={}):
+                          **labels):
         """
         Add transcript synthesis reaction. Transcription rate is dependent upon coupling with other cells.
 
@@ -277,7 +277,7 @@ class CoupledCells(CoupledCell):
                           rep=None,
                           k_m=1,
                           n=1,
-                          labels={}):
+                          **labels):
         """
         Add transcript synthesis reaction for an individual cell. Transcription rate is dependent upon coupling with other cells.
 

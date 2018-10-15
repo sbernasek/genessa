@@ -97,9 +97,8 @@ class RateLaws:
         # add any repressors for Hill and Coupling reactions
         if rxn.type in ('Hill', 'Coupling'):
             for repressor in rxn.repressors:
-                repressor_name = 'Repression of ' + rxn.name
+                repressor_name = rxn.name + ' repression'
                 rate_law = self.get_enzymatic_rate_law(repressor)
-                rate_law = '1 - ' + rate_law
                 self.table.append([repressor_name, '', '', rate_law, '', 'NA'])
 
     def assemble_reactants(self, rxn):
@@ -306,11 +305,17 @@ class RateLaws:
         elif rxn.num_active_species > 0 and len(activity) == 0:
             activity += substrate_contribution
 
+        # get species/michaelis constant quotient
+        if rxn.type == 'Hill':
+            quotient = '{:s}/{:s}'.format(str(rxn.k_m), activity)
+        else:
+            quotient = '{:s}/{:s}'.format(activity, str(rxn.k_m))
+
         # assemble rate law
         if rxn.n != 1:
-            rate_law = activity+'^'+str(rxn.n)[:4] + '/(' + activity + '^' + str(rxn.n)[:4] + ' + ' + str(rxn.k_m)[:6]+ '^' + str(rxn.n)[:4]+')'
+            rate_law = '1 / (1 + ({:s})^{:0.1f})'.format(quotient, rxn.n)
         else:
-            rate_law = '{:s}/({:s}+{:s})'.format(activity, activity, str(rxn.k_m)[:6])
+            rate_law = '1 / (1 + {:s})'.format(quotient, rxn.n)
 
         return rate_law
 
