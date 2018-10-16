@@ -331,10 +331,18 @@ setup(
 
     # Declare packages so that  python -m setup build  will copy .py files
     packages = ["genessa",
-                "genessa.solver"],
+                "genessa.demo",
+                "genessa.kinetics",
+                "genessa.models",
+                "genessa.networks",
+                "genessa.signals",
+                "genessa.solver",
+                "genessa.timeseries"],
 
     # Install Cython headers so that other Cython modules can cimport ours
-    package_data={'genessa.solver': ['*.pxd', '*.pyx']},
+    package_data={'genessa.kinetics': ['*.pxd', '*.pyx'],
+                  'genessa.signals': ['*.pxd', '*.pyx'],
+                  'genessa.solver': ['*.pxd', '*.pyx']},
 
     # Disable zip_safe so cython finds .pxd within .egg
     zip_safe = False,
