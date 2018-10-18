@@ -110,9 +110,9 @@ cdef class cFeedBack(cMassAction):
         cdef unsigned int index, ind, count, value
         cdef unsigned int T = self.n_targets.data.as_uints[rxn]
         cdef double rate = cMassAction.evaluate_rxn_rate(self,
-                                                         rxn,
-                                                         states,
-                                                         inputs)
+            rxn,
+            states,
+            inputs)
 
         # if any of the target levels are zero, set rate to zero
         index = self.targets_ind.data.as_uints[rxn]
@@ -121,6 +121,7 @@ cdef class cFeedBack(cMassAction):
             value = states[ind]
             if value == 0:
                 rate = 0
+                break
 
         return rate
 

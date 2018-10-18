@@ -62,7 +62,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
     """
 
-    def __init__(self, network):
+    def __init__(self, network, seed=-1):
         """
         Instantiate stochastic simulation.
 
@@ -70,9 +70,16 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
             network (Network) - python network instance
 
+            seed (int) - seed for random number generator
+
         """
 
         cdef unsigned int i
+        cdef int simulator_seed = <int> seed
+
+        # seed random number generator
+        if seed != -1:
+            srand(simulator_seed)
 
         # set flag for integrator
         if self.R.icontrol.M == 0:
@@ -89,7 +96,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
         for i in xrange(self.M):
             self.rxn_order[i] = i
 
-    def __cinit__(self, network):
+    def __cinit__(self, network, *args, **kwargs):
         """ Allocate memory for simulation variables. """
         self.allocate_memory()
 
@@ -174,7 +181,8 @@ cdef class cStochasticSystem(cDeterministicSystem):
                     double[:] integrator_ic,
                     cSignalType signal,
                     double duration=100,
-                    double sampling_interval=1.):
+                    double sampling_interval=1.,
+                    int seed=-1):
         """
         Python interface for stochastic simulation.
 
@@ -190,6 +198,8 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
             sampling_interval (double) - sampling interval
 
+            seed (int) - seed for random number generator
+
         Returns:
 
             times (np.ndarray[double]) - timepoints, length T
@@ -197,6 +207,10 @@ cdef class cStochasticSystem(cDeterministicSystem):
             states (np.ndarray[long]) - interpolated state values, shaped (N,T)
 
         """
+
+        # seed random number generator
+        if seed != -1:
+            srand(seed)
 
         # set initial conditions
         self.set_states(ic)
@@ -445,6 +459,8 @@ class StochasticSimulation(DeterministicSimulation):
 
         solver (cStochasticSystem) - cython-based stochastic system
 
+        seed (int) - seed for random number generator
+
     Inherited attributes:
 
         network (Network) - python Network instance
@@ -458,6 +474,24 @@ class StochasticSimulation(DeterministicSimulation):
         I (unsigned int) - number of external inputs
 
     """
+    def __init__(self, network, condition, seed=None):
+        """
+        Instantiate deterministic simulation for a given network.
+
+        Args:
+
+            network (Network) - python Network instance
+
+            condition (str) - environmental conditions affecting rates
+
+            seed (int) - seed for random number generator
+
+        """
+        if seed is None:
+            seed = -1
+
+        self.seed = seed
+        super().__init__(network, condition)
 
     def set_solver(self, network):
         """
@@ -468,14 +502,15 @@ class StochasticSimulation(DeterministicSimulation):
             network (Network) - python Network instance
 
         """
-        self.solver = cStochasticSystem(network)
+        self.solver = cStochasticSystem(network, self.seed)
 
     def simulate(self,
             ic=None,
             integrator_ic=None,
             signal=None,
             duration=100.,
-            dt=1.):
+            dt=1.,
+            seed=None):
         """
         Run stochastic simulation.
 
@@ -490,6 +525,8 @@ class StochasticSimulation(DeterministicSimulation):
             duration (float) - simulation duration
 
             dt (float) - sampling interval
+
+            seed (int) - seed for random number generator
 
         Returns:
 
@@ -518,13 +555,18 @@ class StochasticSimulation(DeterministicSimulation):
         assert (ic.size==self.N), 'Wrong IC dimensions.'
         assert (integrator_ic.size==self.N), 'Wrong Integrator IC dimensions.'
 
+        # set default seed (not used if negative)
+        if seed is None:
+            seed = -1
+
         # run stochastic simulation
         dynamics = self.solver.run(
             ic=ic,
             integrator_ic=integrator_ic,
             signal=signal,
             duration=duration,
-            sampling_interval=dt)
+            sampling_interval=dt,
+            seed=seed)
 
         return dynamics
 
@@ -549,13 +591,16 @@ class MonteCarloSimulation(StochasticSimulation):
 
         solver (cStochasticSystem) - cython-based stochastic system
 
+        seed (int) - seed for random number generator
+
     """
 
     def __init__(self,
                  network,
                  condition=None,
                  ic=None,
-                 integrator_ic=None):
+                 integrator_ic=None,
+                 seed=-1):
         """
         Each instance has a fixed set of simulation parameters for which samples are generated.
 
@@ -569,10 +614,12 @@ class MonteCarloSimulation(StochasticSimulation):
 
             integrator_ic (array like, tuple, or func) - integrator initial conditions
 
+            seed (int) - seed for random number generator
+
         """
 
         # instantiate simulation
-        super().__init__(network, condition)
+        super().__init__(network, condition, seed=seed)
 
         # set initial condition generating functions
         self.ic = self.build_ic_generator(ic)
@@ -618,7 +665,8 @@ class MonteCarloSimulation(StochasticSimulation):
             N=100,
             signal=None,
             duration=100,
-            dt=1):
+            dt=1,
+            seed=None):
         """
         Run multiple stochastic simulations.
 
@@ -631,6 +679,8 @@ class MonteCarloSimulation(StochasticSimulation):
             duration (float) - simulation duration
 
             dt (float) - sampling interval
+
+            seed (int) - seed for random number generator
 
         Returns:
 
@@ -655,7 +705,8 @@ class MonteCarloSimulation(StochasticSimulation):
                 integrator_ic=integrator_ic,
                 signal=signal,
                 duration=duration,
-                dt=dt)
+                dt=dt,
+                seed=seed)
 
             # append states vector
             samples.append(states)

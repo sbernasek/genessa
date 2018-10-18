@@ -37,7 +37,8 @@ cdef class cStochasticSystem(cDeterministicSystem):
         double[:] integrator_ic,
         cSignalType signal,
         double duration=*,
-        double sampling_interval=*)
+        double sampling_interval=*,
+        int seed=*)
 
     cdef void ssa(self,
         cSignalType signal,

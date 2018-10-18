@@ -320,7 +320,7 @@ setup(
 
     # See http://setuptools.readthedocs.io/en/latest/setuptools.html
     setup_requires = setup_requires,
-    install_requires = ["numpy", "scipy", "matplotlib"],
+    install_requires = ["numpy", "scipy", "matplotlib", "tabulate"],
     provides = ["genessa"],
 
     # keywords for PyPI

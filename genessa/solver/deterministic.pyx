@@ -41,7 +41,7 @@ cdef class cDeterministicSystem:
 
     """
 
-    def __cinit__(self, network):
+    def __cinit__(self, network, *args, **kwargs):
         """
         Instantiate system of reactions.
 

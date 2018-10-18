@@ -1,7 +1,7 @@
 # cython: profile=False
 
 """
-TO DO: DDOOOOOOO
+TO DO:
 - convert .data.as_doubles to raw pointers
 - generalize rxn types, see if can use fused types to remove explicitly declaring all of them
 """
