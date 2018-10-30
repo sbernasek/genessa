@@ -1,6 +1,27 @@
 # -*- coding: utf-8 -*-
 
+# to build without cython compilation, add extra argument
+# –install-option=”-C=1”
+
+
 from __future__ import division, print_function, absolute_import
+import sys
+from argparse import ArgumentParser
+
+
+################################################################
+# Additional argument handling (for skipping cython compilation)
+################################################################
+
+argparser = ArgumentParser(add_help=False)
+argparser.add_argument('-C', '--no-compile',
+                    help='Skip cython compilation.',
+                    type=int,
+                    default=0,
+                    required=False)
+args, unknown = argparser.parse_known_args()
+args = vars(args)
+sys.argv = [sys.argv[0]] + unknown
 
 
 #########################################################
@@ -46,16 +67,24 @@ import numpy as np
 from setuptools import setup
 from setuptools.extension import Extension
 
-# if Cython is available, compile extensions
-try:
-    from Cython.Build import cythonize
-    USE_CYTHON = True
-
-# otherwise, use pre-compiled build
-except ImportError:
-    #sys.exit("Cython is required to build the extension modules.")
+# if no_compile flag is True, skip compilation
+if bool(args['no_compile']) == True:
     USE_CYTHON = False
-    print('Cython not found. Defaulting to pre-compiled version.')
+
+# otherwise
+else:
+
+    # if Cython is available, compile extensions
+    try:
+        from Cython.Build import cythonize
+        USE_CYTHON = True
+
+    # otherwise, use pre-compiled build
+    except ImportError:
+        #sys.exit("Cython is required to build the extension modules.")
+        USE_CYTHON = False
+        print('Cython not found. Defaulting to pre-compiled version.')
+
 
 #########################################################
 # Cython options
@@ -68,6 +97,7 @@ if USE_CYTHON:
 else:
     ext_type = 'c'
     setup_requires = ["numpy"],
+
 
 #########################################################
 # Compiler options
@@ -320,7 +350,11 @@ setup(
 
     # See http://setuptools.readthedocs.io/en/latest/setuptools.html
     setup_requires = setup_requires,
-    install_requires = ["numpy", "scipy", "matplotlib", "tabulate"],
+    install_requires = ["numpy",
+                        "scipy",
+                        "matplotlib",
+                        "tabulate",
+                        "networkx"],
     provides = ["genessa"],
 
     # keywords for PyPI
