@@ -121,12 +121,6 @@ cdef inline unsigned int choose_rxn(unsigned int* order,
     cdef unsigned int index
 
     r = total_rate * random
-    # for index in xrange(num_rxns):
-    #     rate = rates[order[index]]
-    #     if r <= 0:
-    #         index -= 1
-    #         break
-    #     r -= rate
     for index in xrange(num_rxns):
         rate = rates[order[index]]
         r -= rate

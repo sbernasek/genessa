@@ -4,3 +4,4 @@
 build/*
 ipynb_checkpoints/*
 genessa.egg-info/
+debug/
