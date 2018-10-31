@@ -339,7 +339,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
                     continue
 
             # evaluate timestep
-            rfloat = rand()/(RAND_MAX*1.0)
+            rfloat = rand()/(RAND_MAX+1.0)
             tau = evaluate_timestep(self.R.total_rate, rfloat)
 
             # if timestep is longer than sampling_interval, take small step
