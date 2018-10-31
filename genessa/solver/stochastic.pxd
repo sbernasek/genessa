@@ -1,10 +1,15 @@
 # cython external imports
 from libc.math cimport log
+from libc.stdlib cimport rand, srand, RAND_MAX
+from libc.time cimport time
 from cpython.array cimport array
 
 # import intra-package cython dependencies
 from ..signals.signals cimport cSignalType
 from .deterministic cimport cDeterministicSystem
+
+# seed random number generator
+srand(time(NULL))
 
 
 cdef class cStochasticSystem(cDeterministicSystem):
@@ -116,10 +121,21 @@ cdef inline unsigned int choose_rxn(unsigned int* order,
     cdef unsigned int index
 
     r = total_rate * random
+    # for index in xrange(num_rxns):
+    #     rate = rates[order[index]]
+    #     if r <= 0:
+    #         index -= 1
+    #         break
+    #     r -= rate
     for index in xrange(num_rxns):
         rate = rates[order[index]]
-        if r <= 0 or rate==0:
-            index -= 1
-            break
         r -= rate
+        if r <= 0:
+            break
+
+    # recurse with a new random float (accounts for roundoff error)
+    if r > 0:
+        random = rand()/(RAND_MAX+1.0)
+        index = choose_rxn(order, rates, num_rxns, total_rate, random)
+
     return order[index]
