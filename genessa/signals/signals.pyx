@@ -3,6 +3,7 @@
 # cython external imports
 cimport numpy as np
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
+from libc.float cimport DBL_MAX
 
 # python external imports
 import numpy as np
@@ -22,6 +23,8 @@ cdef class cSignal:
 
         value (double*) - signal values
 
+        next_update (double) - time of next update
+
     """
 
     def __init__(self, value=0):
@@ -35,6 +38,7 @@ cdef class cSignal:
         """
         assert self.I==1, 'Incorrect number of signal channels.'
         self.value[0] = value
+        self.next_update = DBL_MAX
 
     def __cinit__(self, *args, **kwargs):
         """
@@ -230,6 +234,7 @@ cdef class cSquarePulse(cSignal):
     cdef void reset(self) nogil:
         """ Reset signal values to off values. """
         self.set_value(&self.off)
+        self.next_update = self.t_on
 
     cdef void update(self, double t) nogil:
         """
@@ -243,8 +248,10 @@ cdef class cSquarePulse(cSignal):
         if t >= self.t_on:
             if t < self.t_off:
                 self.set_value(&self.on)
+                self.next_update = self.t_off
             else:
                 self.set_value(&self.off)
+                self.next_update = DBL_MAX
         else:
             self.set_value(&self.off)
 
@@ -284,12 +291,14 @@ cdef class cSquareWave(cSignal):
         """
         super().__init__(off)
         self.period = period
+        self.halfperiod = period/2.
         self.off = off
         self.on = on
 
     cdef void reset(self) nogil:
         """ Reset signal to off value. """
         self.set_value(&self.off)
+        self.next_update = 0.0
 
     cdef void update(self, double t) nogil:
         """
@@ -300,10 +309,13 @@ cdef class cSquareWave(cSignal):
             t (double) - time
 
         """
-        if (t // (self.period/2)) % 2 == 0:
+        if (t // self.halfperiod) % 2 == 0:
             self.set_value(&self.off)
         else:
             self.set_value(&self.on)
+
+        # set time of next update
+        self.next_update = ((t // self.halfperiod) + 1) * self.halfperiod
 
 
 cdef class cMultiPulse(cSignal):
@@ -346,11 +358,14 @@ cdef class cMultiPulse(cSignal):
 
         # set defaults
         if t_off is None:
-            t_off = np.ones(self.I, dtype=np.float64)
+            t_off = np.ones(self.I, dtype=np.float64) * DBL_MAX
         if off is None:
             off = np.zeros(self.I, dtype=np.float64)
         if on is None:
             on = np.ones(self.I, dtype=np.float64)
+
+        # determine update times
+        update_times = np.sort(np.hstack((t_off, t_on)))
 
         # populate memory with constant signal values
         for i in xrange(self.I):
@@ -358,6 +373,7 @@ cdef class cMultiPulse(cSignal):
             self.t_off[i] = t_off[i]
             self.off[i] = off[i]
             self.on[i] = on[i]
+            self.update_times[i] = update_times[i]
 
         # set values to off state
         self.reset()
@@ -387,12 +403,17 @@ cdef class cMultiPulse(cSignal):
         if not self.on:
             raise MemoryError('Could not allocate memory for on values.')
 
+        self.update_times = <double*> PyMem_Malloc(self.I * sizeof(double))
+        if not self.update_times:
+            raise MemoryError('Could not allocate memory for update times.')
+
     def __dealloc__(self):
         """ Deallocate memory from array attributes. """
         PyMem_Free(self.t_on)
         PyMem_Free(self.t_off)
         PyMem_Free(self.off)
         PyMem_Free(self.on)
+        PyMem_Free(self.update_times)
 
     def __call__(self, double t):
         """
@@ -414,6 +435,7 @@ cdef class cMultiPulse(cSignal):
     cdef void reset(self) nogil:
         """ Reset signal values to off values. """
         self.set_value(self.off)
+        self.next_update = self.update_times[0]
 
     cdef void update(self, double t) nogil:
         """
@@ -426,6 +448,7 @@ cdef class cMultiPulse(cSignal):
         """
 
         cdef unsigned int index
+        cdef double next_update
 
         # get input from each channel
         for index in xrange(self.I):
@@ -436,3 +459,10 @@ cdef class cMultiPulse(cSignal):
                     self.value[index] = self.off[index]
             else:
                 self.value[index] = self.off[index]
+
+        # determine next update
+        for index in xrange(self.I):
+            next_update = self.update_times[index]
+            if next_update > t:
+                self.next_update = next_update
+                break

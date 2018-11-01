@@ -6,6 +6,7 @@ cdef class cSignal:
     # attributes
     cdef unsigned int I
     cdef double *value
+    cdef double next_update
 
     # methods
     cpdef double get_value(self, unsigned int index, double t)
@@ -28,6 +29,7 @@ cdef class cSquareWave(cSignal):
 
     # attributes
     cdef double period
+    cdef double halfperiod
     cdef double on, off
 
 
@@ -38,6 +40,7 @@ cdef class cMultiPulse(cSignal):
     cdef double *t_off
     cdef double *on
     cdef double *off
+    cdef double *update_times
 
 
 ctypedef fused cSignalType:

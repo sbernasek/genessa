@@ -342,9 +342,14 @@ cdef class cStochasticSystem(cDeterministicSystem):
             rfloat = rand()/(RAND_MAX+1.0)
             tau = evaluate_timestep(self.R.total_rate, rfloat)
 
-            # if timestep is longer than sampling_interval, take small step
-            if tau > sampling_interval:
-                t += sampling_interval
+            # # if timestep is longer than sampling_interval, take small step
+            # if tau > sampling_interval:
+            #     t += sampling_interval
+            #     continue
+
+            # if input change comes before next reaction, jump to that
+            if t+tau > signal.next_update:
+                t = signal.next_update
                 continue
 
             # choose a reaction
@@ -353,9 +358,6 @@ cdef class cStochasticSystem(cDeterministicSystem):
                              self.M,
                              self.R.total_rate,
                              rfloat)
-
-            #print(self.R.total_rate, self.states[2])
-
 
             # fire reaction
             self.fire_reaction(rxn, 1, self.states)
