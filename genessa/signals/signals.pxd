@@ -11,6 +11,7 @@ cdef class cSignal:
     # methods
     cpdef double get_value(self, unsigned int index, double t)
     cpdef np.ndarray get_values(self, double t)
+    cpdef double get_next_update(self, double t)
     cdef void update(self, double t) nogil
     cdef void reset(self) nogil
     cdef void set_value(self, double *values) nogil

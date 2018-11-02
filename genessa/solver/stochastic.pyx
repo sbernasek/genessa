@@ -3,7 +3,7 @@
 # cython intra-package imports
 from ..signals.signals cimport cSignalType, cSignal
 from .deterministic cimport cDeterministicSystem
-from .stochastic cimport cStochasticSystem, choose_rxn, evaluate_timestep
+from .stochastic cimport cStochasticSystem, evaluate_timestep, sum_double_arr
 
 # python intra-package imports
 from .deterministic import DeterministicSimulation
@@ -276,6 +276,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
         cdef double t = 0.
         cdef unsigned int rxn = 0
         cdef double tau
+        cdef double next_time
 
         # declare random float
         cdef double rfloat
@@ -285,10 +286,13 @@ cdef class cStochasticSystem(cDeterministicSystem):
         if self.null_input == 0:
             signal.reset()
 
+        cdef unsigned int state
+        cdef double input_value
+
         # ================================================================
         # BEGIN SIMULATION
         # ================================================================
-        while t < duration:
+        while True:
 
             # record state values until current time
             self.record(t)
@@ -298,8 +302,6 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
                 # update input value
                 signal.update(t)
-
-                #print('At {:0.2f}, I={:0.1f}'.format(t, signal.value[0]))
 
                 # check if input changed and input rates accordingly
                 for index in xrange(self.I):
@@ -336,36 +338,40 @@ cdef class cStochasticSystem(cDeterministicSystem):
                             break
                         else:
                             t += sampling_interval
-                    continue
+
+                    # if simulation is complete, end it
+                    if t >= duration:
+                        break
+                    else:
+                        continue
 
             # evaluate timestep
             rfloat = rand()/(RAND_MAX+1.0)
             tau = evaluate_timestep(self.R.total_rate, rfloat)
-
-            # # if timestep is longer than sampling_interval, take small step
-            # if tau > sampling_interval:
-            #     t += sampling_interval
-            #     continue
+            next_time = t + tau
 
             # if input change comes before next reaction, jump to that
-            if t+tau > signal.next_update:
+            if next_time > signal.next_update:
                 t = signal.next_update
                 continue
 
-            # choose a reaction
-            rxn = choose_rxn(self.rxn_order,
-                             self.R.rates,
-                             self.M,
-                             self.R.total_rate,
-                             rfloat)
+            # fire reaction if it occurs within the simulation duration
+            elif next_time < duration:
 
-            # fire reaction
-            self.fire_reaction(rxn, 1, self.states)
+                # choose a reaction
+                rxn = self.choose_rxn(rfloat)
 
-            # increment time and update cumulative state values
-            t += tau
-            if self.integrate == 1:
-                self.update_cumulative(self.states, self.cumulative, tau)
+                # fire reaction
+                self.fire_reaction(rxn, 1, self.states)
+
+                # increment time and update cumulative state values
+                t = next_time
+                if self.integrate == 1:
+                    self.update_cumulative(self.states, self.cumulative, tau)
+
+            # otherwise, end the simulation
+            else:
+                break
 
         # ================================================================
         # END SIMULATION
@@ -373,6 +379,39 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
         # record remaining timepoints
         self.record(duration)
+
+    cdef unsigned int choose_rxn(self, double random) nogil:
+        """
+        Select a reaction with probabilities weighted by reaction rates.
+
+        Args:
+
+            random (double) - random float on [0, 1) interval
+
+        Returns:
+
+            rxn (unsigned int) - chosen reaction index
+
+        """
+        cdef double r = self.R.total_rate * random
+        cdef double rate = 0
+        cdef unsigned int index, rxn
+
+        # select a reaction
+        for index in xrange(self.M):
+            rate = self.R.rates[self.rxn_order[index]]
+            r -= rate
+            if r <= 0:
+                break
+
+        # if procedure failed due to roundoff error, recurse with total rate
+        if r > 0:
+            self.R.total_rate = sum_double_arr(self.R.rates, self.M)
+            rxn = self.choose_rxn(random)
+        else:
+            rxn = self.rxn_order[index]
+
+        return rxn
 
     cdef void fire_reaction(self,
                             unsigned int rxn,

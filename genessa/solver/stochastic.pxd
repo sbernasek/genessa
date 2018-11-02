@@ -50,6 +50,9 @@ cdef class cStochasticSystem(cDeterministicSystem):
         double duration,
         double sampling_interval) nogil
 
+    cdef unsigned int choose_rxn(self,
+        double random) nogil
+
     cdef void fire_reaction(self,
         unsigned int rxn,
         unsigned int extent,
@@ -67,6 +70,15 @@ cdef class cStochasticSystem(cDeterministicSystem):
 
 
 # ======================== STANDALONE FUNCTIONS ===============================
+
+
+cdef inline double sum_double_arr(double* values, unsigned int N) nogil:
+    """ Returns the sum of <N> indepndent <values>. """
+    cdef unsigned int i
+    cdef double total = 0
+    for i in xrange(N):
+        total += values[i]
+    return total
 
 
 cdef inline double evaluate_timestep(double total_rate, double random) nogil:
@@ -129,7 +141,10 @@ cdef inline unsigned int choose_rxn(unsigned int* order,
 
     # recurse with a new random float (accounts for roundoff error)
     if r > 0:
-        random = rand()/(RAND_MAX+1.0)
-        index = choose_rxn(order, rates, num_rxns, total_rate, random)
+        #random = rand()/(RAND_MAX+1.0)
+        total_rate = sum_double_arr(rates, num_rxns)
+        rxn = choose_rxn(order, rates, num_rxns, total_rate, random)
+    else:
+        rxn = order[index]
 
-    return order[index]
+    return rxn

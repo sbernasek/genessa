@@ -126,6 +126,22 @@ cdef class cSignal:
         self.update(t)
         return np.asarray(<np.float64_t[:self.I]> self.value)
 
+    cpdef double get_next_update(self, double t):
+        """
+        Returns time of next update.
+
+        Args:
+
+            t (double) - time
+
+        Returns:
+
+            next_update (double) - time of next update
+
+        """
+        self.update(t)
+        return self.next_update
+
     cdef void update(self, double t) nogil:
         pass
 
@@ -254,6 +270,7 @@ cdef class cSquarePulse(cSignal):
                 self.next_update = DBL_MAX
         else:
             self.set_value(&self.off)
+            self.next_update = self.t_on
 
 
 cdef class cSquareWave(cSignal):
