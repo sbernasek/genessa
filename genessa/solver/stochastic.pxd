@@ -72,6 +72,14 @@ cdef class cStochasticSystem(cDeterministicSystem):
 # ======================== STANDALONE FUNCTIONS ===============================
 
 
+cdef inline int rand_open() nogil:
+    """ Returns random integer on the open interval (0, RAND_MAX). """
+    cdef int random_int = rand()
+    if random_int == 0 or random_int == RAND_MAX:
+        random_int = rand_open()
+    return random_int
+
+
 cdef inline double sum_double_arr(double* values, unsigned int N) nogil:
     """ Returns the sum of <N> indepndent <values>. """
     cdef unsigned int i

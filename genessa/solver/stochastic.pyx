@@ -3,7 +3,8 @@
 # cython intra-package imports
 from ..signals.signals cimport cSignalType, cSignal
 from .deterministic cimport cDeterministicSystem
-from .stochastic cimport cStochasticSystem, evaluate_timestep, sum_double_arr
+from .stochastic cimport cStochasticSystem
+from .stochastic cimport evaluate_timestep, sum_double_arr, rand_open
 
 # python intra-package imports
 from .deterministic import DeterministicSimulation
@@ -279,7 +280,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
         cdef double next_time
 
         # declare random float
-        cdef double rfloat
+        cdef double random_float
 
         # initialize input
         cdef bint changed
@@ -346,8 +347,8 @@ cdef class cStochasticSystem(cDeterministicSystem):
                         continue
 
             # evaluate timestep
-            rfloat = rand()/(RAND_MAX+1.0)
-            tau = evaluate_timestep(self.R.total_rate, rfloat)
+            random_float = rand_open() / (RAND_MAX*1.0)
+            tau = evaluate_timestep(self.R.total_rate, random_float)
             next_time = t + tau
 
             # if input change comes before next reaction, jump to that
@@ -359,7 +360,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
             elif next_time < duration:
 
                 # choose a reaction
-                rxn = self.choose_rxn(rfloat)
+                rxn = self.choose_rxn(random_float)
 
                 # fire reaction
                 self.fire_reaction(rxn, 1, self.states)
