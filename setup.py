@@ -298,7 +298,10 @@ ext_modules =[
     declare_extension("genessa.solver.deterministic", ext_type, dirs),
 
     # stochastic simulation
-    declare_extension("genessa.solver.stochastic", ext_type, dirs)
+    declare_extension("genessa.solver.stochastic", ext_type, dirs),
+
+    # stochastic simulation debugging
+    declare_extension("genessa.solver.debug", ext_type, dirs)
 
     ]
 
