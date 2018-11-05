@@ -208,6 +208,7 @@ cdef class cDebug(cStochasticSystem):
 
                 # if there is no input, jump to end
                 if self.null_input == 1:
+                    print('EXITING ON ZERO RATE WITHOUT INPUT')
                     break
                 else:
                     # skip to next change in input
@@ -222,6 +223,7 @@ cdef class cDebug(cStochasticSystem):
 
                     # if simulation is complete, end it
                     if t >= duration:
+                        print('EXITING ON ZERO RATE WITH INPUT')
                         break
                     else:
                         continue
@@ -252,6 +254,7 @@ cdef class cDebug(cStochasticSystem):
 
             # otherwise, end the simulation
             else:
+                print('EXITING AT END OF SIMULATION DURATION')
                 break
 
         # ================================================================
