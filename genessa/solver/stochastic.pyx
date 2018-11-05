@@ -257,7 +257,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef void ssa(self,
         cSignalType signal,
         double duration,
-        double sampling_interval) with gil:
+        double sampling_interval) nogil:
         """
         Run Gillespie SSA.
 
@@ -485,7 +485,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
             end_time (double) - time to stop recording
 
         """
-        while self.sample_time <= end_time:
+        while self.sample_time < end_time:
             self.sample()
             self.sample_time += self.sampling_interval
 

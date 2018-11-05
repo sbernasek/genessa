@@ -48,7 +48,7 @@ cdef class cStochasticSystem(cDeterministicSystem):
     cdef void ssa(self,
         cSignalType signal,
         double duration,
-        double sampling_interval) with gil
+        double sampling_interval) nogil
 
     cdef unsigned int choose_rxn(self,
         double random) nogil
