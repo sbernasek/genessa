@@ -119,6 +119,7 @@ cdef class cDebug(cStochasticSystem):
         cdef unsigned int T = <unsigned int>ceil(duration/sampling_interval)
         samples = np.zeros((T, self.N), dtype=np.uint32)
         self.samples = array('I', samples.flatten())
+        print('SAMPLES SHAPE: ({:d}, {:d})'.format(T, self.N))
 
         # run stochastic simulation algorithm
         print('CALL TO SSA.')
@@ -264,9 +265,11 @@ cdef class cDebug(cStochasticSystem):
         print('FINISHED SSA ALGORITHM.')
 
         # record remaining timepoints
-        #self.record(duration)
+        self.record(duration)
 
         print('FINISHED RECORDING.')
+        print('SAMPLE TIME: {:0.2f}'.format(self.sample_time))
+        print('SAMPLE INDEX: {:d}'.format(self.sample_index))
 
 
 # ============================= PYTHON CODE ===================================
