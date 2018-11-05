@@ -255,9 +255,9 @@ cdef class cStochasticSystem(cDeterministicSystem):
         return times, states.reshape(T, self.N).T
 
     cdef void ssa(self,
-                    cSignalType signal,
-                    double duration,
-                    double sampling_interval) nogil:
+        cSignalType signal,
+        double duration,
+        double sampling_interval) with gil:
         """
         Run Gillespie SSA.
 

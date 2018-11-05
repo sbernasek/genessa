@@ -1,7 +1,7 @@
 # cython: profile=False
 
 # cython intra-package imports
-from ..signals.signals cimport cSignalType
+from ..signals.signals cimport cSignalType, cSignal
 from .stochastic cimport cStochasticSystem
 from .stochastic cimport evaluate_timestep, sum_double_arr, rand_open
 
@@ -10,10 +10,13 @@ from .stochastic import MonteCarloSimulation
 
 # cython external imports
 from libc.stdlib cimport rand, srand, RAND_MAX
-#from cpython.array cimport array
+from libc.math cimport ceil
+cimport numpy as np
+from cpython.array cimport array
 
 # python external imports
-#from array import array
+from array import array
+import numpy as np
 
 
 # ============================= CYTHON CODE ===================================
@@ -51,10 +54,88 @@ cdef class cDebug(cStochasticSystem):
 
     """
 
-    cdef void ssa(self,
+    cpdef tuple run(self,
+                    unsigned int[:] ic,
+                    double[:] integrator_ic,
                     cSignalType signal,
-                    double duration,
-                    double sampling_interval) with gil:
+                    double duration=100,
+                    double sampling_interval=1.,
+                    int seed=-1):
+        """
+        Python interface for stochastic simulation.
+
+        Args:
+
+            ic (unsigned int[:]) - initial state values
+
+            integrator_ic (double[:]) - initial integrator values
+
+            signal (cSignalType) - function returning signal value(s)
+
+            duration (double) - simulation length
+
+            sampling_interval (double) - sampling interval
+
+            seed (int) - seed for random number generator
+
+        Returns:
+
+            times (np.ndarray[double]) - timepoints, length T
+
+            states (np.ndarray[long]) - interpolated state values, shaped (N,T)
+
+        """
+
+        # seed random number generator
+        if seed != -1:
+            srand(seed)
+
+        # set initial conditions
+        self.set_states(ic)
+        self.set_cumulative(integrator_ic)
+
+        # initialize signal
+        self.null_input = 0
+        if signal is None:
+            self.null_input = 1
+            signal = cSignal()
+
+        # set initial input signal values
+        if self.null_input == 0:
+            signal.reset()
+            self.set_inputs(signal.get_values(0))
+
+        # initialize all rates and sort order
+        self.R.reset_rates()
+        self.R.update_all(self.states, self.inputs, self.cumulative)
+        self.set_rxn_order(self.get_rxn_rates())
+
+        # declare variables for sampling
+        self.sampling_interval = sampling_interval
+        self.sample_time = 0
+        self.sample_index = 0
+
+        # preallocate samples array to record simulation history
+        cdef unsigned int T = <unsigned int>ceil(duration/sampling_interval)
+        samples = np.zeros((T, self.N), dtype=np.uint32)
+        self.samples = array('I', samples.flatten())
+
+        # run stochastic simulation algorithm
+        print('CALL TO SSA.')
+        self.ssa(signal=signal,
+                 duration=duration,
+                 sampling_interval=sampling_interval)
+
+        #return numpy arrays
+        cdef np.ndarray times = np.arange(0, duration, sampling_interval)
+        cdef np.ndarray states = np.frombuffer(self.samples, dtype=np.uint32)
+
+        return times, states.reshape(T, self.N).T
+
+    cdef void ssa(self,
+        cSignalType signal,
+        double duration,
+        double sampling_interval) with gil:
         """
         Run Gillespie SSA.
 
@@ -86,6 +167,8 @@ cdef class cDebug(cStochasticSystem):
 
         cdef unsigned int state
         cdef double input_value
+
+        print('BEGINNING SSA ALGORITHM.')
 
         # ================================================================
         # BEGIN SIMULATION
@@ -177,116 +260,12 @@ cdef class cDebug(cStochasticSystem):
         # END SIMULATION
         # ================================================================
 
+        print('FINISHED SSA ALGORITHM.')
+
         # record remaining timepoints
         self.record(duration)
 
-    cdef unsigned int choose_rxn(self, double random) with gil:
-        """
-        Select a reaction with probabilities weighted by reaction rates.
 
-        Args:
-
-            random (double) - random float on [0, 1) interval
-
-        Returns:
-
-            rxn (unsigned int) - chosen reaction index
-
-        """
-        cdef double r = self.R.total_rate * random
-        cdef double rate = 0
-        cdef unsigned int index, rxn
-
-        # select a reaction
-        for index in xrange(self.M):
-            rate = self.R.rates[self.rxn_order[index]]
-            r -= rate
-            if r <= 0:
-                break
-
-        # if procedure failed due to roundoff error, recurse with total rate
-        if r > 0:
-            self.R.total_rate = sum_double_arr(self.R.rates, self.M)
-            rxn = self.choose_rxn(random)
-        else:
-            rxn = self.rxn_order[index]
-
-        return rxn
-
-    cdef void fire_reaction(self,
-                            unsigned int rxn,
-                            unsigned int extent,
-                            unsigned int *states) with gil:
-        """
-        Fire a specified reaction by updating state values.
-
-        Args:
-
-            rxn (unsigned int) - reaction index
-
-            extent (unsigned int) - reaction extent
-
-            states (unsigned int*) - current state values
-
-        """
-        cdef unsigned int N = self.S.lengths[rxn]
-        cdef unsigned int index = self.S.index[rxn]
-        cdef unsigned int count, species
-        cdef int coefficient
-
-        # update each state
-        for count in xrange(N):
-            species = self.S.species[index]
-            coefficient = self.S.coefficients[index]
-            states[species] += (coefficient * extent)
-            index += 1
-
-    cdef void update_cumulative(self,
-                                unsigned int *states,
-                                double *cumulative,
-                                double tau) with gil:
-        """
-
-        Update state integrator values.
-
-        Args:
-
-            states (unsigned int*) - state values
-
-            cumulative (double*) - integrator values
-
-            tau (double) - time step
-
-        """
-        cdef unsigned int i
-        for i in xrange(self.N):
-            cumulative[i] += (tau * states[i])
-
-    cdef void sample(self) with gil:
-        """ Sample current state levels. """
-
-        # record states
-        cdef unsigned int i
-        cdef unsigned int row = self.sample_index*self.N
-        for i in xrange(self.N):
-            self.samples.data.as_uints[row+i] = self.states[i]
-
-        # increment sampling index
-        self.sample_index += 1
-
-    cdef void record(self, double end_time) with gil:
-        """
-
-        Sample constant state levels until specified time.
-
-        Args:
-
-            end_time (double) - time to stop recording
-
-        """
-        while self.sample_time <= end_time:
-            self.sample()
-            self.sample_time += self.sampling_interval
 
 
 
@@ -326,4 +305,5 @@ class Debugger(MonteCarloSimulation):
             network (Network) - python Network instance
 
         """
+        print('SETTING SOLVER.')
         self.solver = cDebug(network, self.seed)
