@@ -198,8 +198,10 @@ class TimeSeries:
         """
 
         # if no values provided, use mean initial values
-        if values is None:
+        if values is None or values == 'initial':
             values = self.initial
+        elif values == 'final':
+            values = self.final
         values = values.reshape(-1, 1)
 
         # convert means and states to deviation form
