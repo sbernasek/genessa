@@ -264,7 +264,7 @@ cdef class cDebug(cStochasticSystem):
         print('FINISHED SSA ALGORITHM.')
 
         # record remaining timepoints
-        self.record(duration)
+        #self.record(duration)
 
         print('FINISHED RECORDING.')
 
