@@ -175,8 +175,6 @@ cdef class cDebug(cStochasticSystem):
         # ================================================================
         while True:
 
-            print(t)
-
             # record state values until current time
             self.record(t)
 
@@ -265,8 +263,7 @@ cdef class cDebug(cStochasticSystem):
         # record remaining timepoints
         self.record(duration)
 
-
-
+        print('FINISHED RECORDING.')
 
 
 # ============================= PYTHON CODE ===================================
