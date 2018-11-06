@@ -283,3 +283,49 @@ class TwoStateGene:
                        labels=dict(name=protein_name+' decay'),
                        atp_sensitive=True,
                        ribosome_sensitive=False)]
+
+
+class SimpleGene:
+    """
+
+    Class defines a single protein species with linear decay dynamics.
+
+    System dimensions:
+        0: Protein
+
+    Attributes:
+
+        nodes (np.ndarray) - node indices
+
+        transcripts (dict) - empty {name: node_id} dictionary
+
+        proteins (dict) - single {name: node_id} pair
+
+        reactions (list) - synthesis and decay reactions
+
+    """
+    def __init__(self, name='CV', g=1):
+        """
+        Create simple gene along with its decay reaction.
+
+        Args:
+
+            name (str) - protein name
+
+            g (float) - decay rate constant
+
+        """
+
+        self.nodes = np.arange(1)
+        self.transcripts = {}
+        self.proteins = {name.upper(): 0}
+
+        # define decay reaction
+        decay = MassAction([-1], [1],
+                  k=g,
+                  labels=dict(name=name.upper() + ' decay'),
+                  atp_sensitive=True,
+                  ribosome_sensitive=False)
+
+        # define reactions
+        self.reactions = [decay]

@@ -69,6 +69,7 @@ class GaussianModel(TimeSeries):
         """ Returns GaussianModel cropped to [start, stop] interval. """
         indices = np.logical_and(self.t >= start, self.t <= stop)
         times = self.t[indices]
+        times = times - times.min()
         states = self.states[:, :, indices]
         return GaussianModel(times, states, bandwidth=self.bandwidth)
 
