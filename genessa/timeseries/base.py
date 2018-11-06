@@ -102,6 +102,13 @@ class TimeSeries:
         """
         return np.diff(np.sign(array-np.ones(array.size)*value)).nonzero()[0]
 
+    def crop(self, start, stop):
+        """ Returns TimeSeries cropped to [start, stop] interval. """
+        indices = np.logical_and(self.t >= start, self.t <= stop)
+        times = self.t[indices]
+        states = self.states[:, :, indices]
+        return TimeSeries(times, states)
+
     def index(self, value, dim, mode='mean'):
         """
         Returns nearest indices of specified value in the specified array. Excludes endpoints.

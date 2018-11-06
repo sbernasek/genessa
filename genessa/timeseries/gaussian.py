@@ -65,6 +65,13 @@ class GaussianModel(TimeSeries):
         """ Instantiate from TimeSeries. """
         return cls(timeseries.t, timeseries.states, bandwidth=bandwidth)
 
+    def crop(self, start, stop):
+        """ Returns GaussianModel cropped to [start, stop] interval. """
+        indices = np.logical_and(self.t >= start, self.t <= stop)
+        times = self.t[indices]
+        states = self.states[:, :, indices]
+        return GaussianModel(times, states, bandwidth=self.bandwidth)
+
     def fit_gaussian(self):
         """ Fits a gaussian across each dimension at each time point. """
         self.norm = norm(loc=self.mean, scale=np.sqrt(self.var))
