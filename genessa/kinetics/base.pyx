@@ -164,6 +164,7 @@ class Reaction:
                  temperature_sensitive=True,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
+                 growth_dependence=0,
                  labels={}):
         """
         Instantiate a single kinetic pathway.
@@ -181,6 +182,8 @@ class Reaction:
             atp_sensitive (bool) - if True, rate scales with metabolism
 
             ribosome_sensitive (bool) - if True, rate scales with ribosomes
+
+            growth_dependence (int) - log k / log growth
 
             labels (dict) - additional labels
 
@@ -207,6 +210,7 @@ class Reaction:
         self.temperature_sensitive = temperature_sensitive
         self.atp_sensitive = atp_sensitive
         self.ribosome_sensitive = ribosome_sensitive
+        self.growth_dependence = growth_dependence
 
         # assign labels
         self.labels = labels

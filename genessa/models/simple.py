@@ -74,7 +74,12 @@ class SimpleCell(Cell):
         self.transcripts.update({k: v+shift for k,v in protein.transcripts.items()})
         self.proteins.update({k: v+shift for k,v in protein.proteins.items()})
 
-    def add_activation(self, protein, activator, k=1, **labels):
+    def add_activation(self,
+            protein,
+            activator,
+            k=1,
+            growth_dependence=0,
+            **labels):
         """
         Add gene activation reaction.
 
@@ -85,6 +90,8 @@ class SimpleCell(Cell):
             activator (str) - names of activating protein
 
             k (float) - activation rate constant
+
+            growth_dependence (int) - log k / log growth
 
             labels (dict) - additional labels for reaction
 
@@ -116,6 +123,7 @@ class SimpleCell(Cell):
                  k=k,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
+                 growth_dependence=growth_dependence,
                  labels=labels)
 
         # add reaction

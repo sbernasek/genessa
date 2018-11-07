@@ -232,6 +232,10 @@ class DeterministicSimulation:
             for rxn in network.reactions:
                 rxn.k *= rate_scaling['translation_capacity']**rxn.ribosome_sensitive
 
+        if 'growth_rate' in rate_scaling.keys():
+            for rxn in network.reactions:
+                rxn.k *= rate_scaling['growth_rate']**rxn.growth_dependence
+
     def differentiate(self, x, inputs):
         """
         Evaluate and return rate of change in state space.

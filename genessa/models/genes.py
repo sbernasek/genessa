@@ -304,7 +304,7 @@ class SimpleGene:
         reactions (list) - synthesis and decay reactions
 
     """
-    def __init__(self, name='CV', g=1):
+    def __init__(self, name='CV', g=1, growth_dependence=0):
         """
         Create simple gene along with its decay reaction.
 
@@ -313,6 +313,8 @@ class SimpleGene:
             name (str) - protein name
 
             g (float) - decay rate constant
+
+            growth_dependence (int) - log k / log growth
 
         """
 
@@ -325,7 +327,8 @@ class SimpleGene:
                   k=g,
                   labels=dict(name=name.upper() + ' decay'),
                   atp_sensitive=True,
-                  ribosome_sensitive=False)
+                  ribosome_sensitive=False,
+                  growth_dependence=growth_dependence)
 
         # define reactions
         self.reactions = [decay]
