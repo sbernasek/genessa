@@ -244,6 +244,7 @@ class MassAction(Reaction):
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
                   ribosome_sensitive=self.ribosome_sensitive,
+                  growth_dependence=self.growth_dependence,
                   parameters=self.parameters,
                   labels=self.labels)
 

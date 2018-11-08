@@ -484,6 +484,7 @@ class Cell(Network):
         temperature_sensitive=True,
         atp_sensitive=True,
         ribosome_sensitive=True,
+        growth_dependence=0,
         **labels):
         """
         Add linear feedback term.
@@ -503,6 +504,8 @@ class Cell(Network):
             atp_sensitive (bool) - scale rate with metabolism
 
             ribosome_sensitive (bool) - scale rate with ribosomes
+
+            growth_dependence (float) - log k / log growth
 
             labels (dict) - additional labels for reaction
 
@@ -535,6 +538,7 @@ class Cell(Network):
             temperature_sensitive=temperature_sensitive,
             atp_sensitive=atp_sensitive,
             ribosome_sensitive=ribosome_sensitive,
+            growth_dependence=growth_dependence,
             labels=labels)
 
         # add reaction
