@@ -25,7 +25,7 @@ from ..kinetics.control cimport cPController, cIController
 from ..kinetics.hill cimport cHill
 from ..kinetics.marbach cimport cTranscription
 from ..kinetics.coupling cimport cCoupling
-from .rates cimport cRates, cRxnMap
+from .rates cimport cRates, cRxnMap, sum_double_arr
 
 
 
@@ -237,9 +237,10 @@ cdef class cRates:
         rate = self.evaluate_rxn_rate(rxn, states, inputs, cumulative)
         old_rate = self.rates[rxn]
 
-        # update total rate
+        # update total rate (using partial update is much faster, but introduces numerical errors)
         self.rates[rxn] = rate
-        self.total_rate += (rate - old_rate)
+        #self.total_rate += (rate - old_rate)
+        self.total_rate = sum_double_arr(self.rates, self.M)
 
     cdef void apply_perturbation(self,
                                  unsigned int rxn,

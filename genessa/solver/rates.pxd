@@ -75,6 +75,15 @@ cdef class cRates:
         double[::1] cumulative)
 
 
+cdef inline double sum_double_arr(double* values, unsigned int N) nogil:
+    """ Returns the sum of <N> indepndent <values>. """
+    cdef unsigned int i
+    cdef double total = 0
+    for i in xrange(N):
+        total += values[i]
+    return total
+
+
 # define mappable function names
 ctypedef void (*cSetRate)(cRates,
                           unsigned int,
