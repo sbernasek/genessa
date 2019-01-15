@@ -257,6 +257,7 @@ class SumReaction(Reaction):
                  temperature_sensitive=True,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
+                 carbon_sensitive=False,
                  parameters=None,
                  labels={}):
 
@@ -266,6 +267,7 @@ class SumReaction(Reaction):
                          temperature_sensitive=temperature_sensitive,
                          atp_sensitive=atp_sensitive,
                          ribosome_sensitive=ribosome_sensitive,
+                         carbon_sensitive=carbon_sensitive,
                          labels=labels)
 
         # set parameters
@@ -297,6 +299,7 @@ class SumReaction(Reaction):
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
                   ribosome_sensitive=self.ribosome_sensitive,
+                  carbon_sensitive=self.carbon_sensitive,
                   parameters=self.parameters,
                   labels=self.labels)
         rxn = self.__class__(s, p, **kw)

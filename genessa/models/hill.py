@@ -98,6 +98,7 @@ class HillCell(Cell):
                    baseline=baseline,
                    repressors=repressors,
                    atp_sensitive=True,
+                   carbon_sensitive=True,
                    ribosome_sensitive=False,
                    labels=labels)
 

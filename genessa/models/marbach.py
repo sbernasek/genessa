@@ -76,6 +76,7 @@ class MarbachCell(Cell):
                             alpha=alpha,
                             perturbed=perturbed,
                             atp_sensitive=True,
+                            carbon_sensitive=True,
                             ribosome_sensitive=False,
                             labels=labels,
                             **kwargs)

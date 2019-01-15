@@ -60,7 +60,8 @@ class Gene:
                        k=g1,
                        labels=dict(name=mrna_decay),
                        atp_sensitive=False,
-                       ribosome_sensitive=False),
+                       ribosome_sensitive=False,
+                       carbon_sensitive=False),
 
             # protein synthesis
             MassAction([0, 1],
@@ -68,7 +69,8 @@ class Gene:
                        k=k,
                        labels=dict(name=translation),
                        atp_sensitive=True,
-                       ribosome_sensitive=True),
+                       ribosome_sensitive=True,
+                       carbon_sensitive=True),
 
             # protein decay
             MassAction([0, -1],
@@ -76,6 +78,7 @@ class Gene:
                        k=g2,
                        labels=dict(name=protein_decay),
                        atp_sensitive=True,
+                       carbon_sensitive=False,
                        ribosome_sensitive=False)]
 
 
@@ -140,6 +143,7 @@ class LinearGene:
                        k=g0,
                        labels=dict(name=gene_name+' off rate'),
                        atp_sensitive=False,
+                       carbon_sensitive=False,
                        ribosome_sensitive=False),
 
             # transcript synthesis
@@ -148,6 +152,7 @@ class LinearGene:
                        k=k1,
                        labels=dict(name=gene_name+' transcription'),
                        atp_sensitive=True,
+                       carbon_sensitive=True,
                        ribosome_sensitive=False),
 
             # transcript decay
@@ -156,6 +161,7 @@ class LinearGene:
                        k=g1,
                        labels=dict(name=gene_name+' decay'),
                        atp_sensitive=False,
+                       carbon_sensitive=False,
                        ribosome_sensitive=False),
 
             # protein synthesis
@@ -164,6 +170,7 @@ class LinearGene:
                        k=k2,
                        labels=dict(name=protein_name+' translation'),
                        atp_sensitive=True,
+                       carbon_sensitive=True,
                        ribosome_sensitive=True),
 
             # protein decay
@@ -172,6 +179,7 @@ class LinearGene:
                        k=g2,
                        labels=dict(name=protein_name+' decay'),
                        atp_sensitive=True,
+                       carbon_sensitive=False,
                        ribosome_sensitive=False)]
 
 
@@ -242,6 +250,7 @@ class TwoStateGene:
                        k=k0,
                        labels=dict(name=gene_name+' on rate'),
                        atp_sensitive=False,
+                       carbon_sensitive=False,
                        ribosome_sensitive=False),
 
             # gene deactivation
@@ -250,6 +259,7 @@ class TwoStateGene:
                        k=g0,
                        labels=dict(name=gene_name+' off rate'),
                        atp_sensitive=False,
+                       carbon_sensitive=False,
                        ribosome_sensitive=False),
 
             # transcript synthesis
@@ -258,6 +268,7 @@ class TwoStateGene:
                        k=k1,
                        labels=dict(name=gene_name+' transcription'),
                        atp_sensitive=True,
+                       carbon_sensitive=True,
                        ribosome_sensitive=False),
 
             # transcript decay
@@ -266,6 +277,7 @@ class TwoStateGene:
                        k=g1,
                        labels=dict(name=gene_name+' decay'),
                        atp_sensitive=False,
+                       carbon_sensitive=False,
                        ribosome_sensitive=False),
 
             # protein synthesis
@@ -274,6 +286,7 @@ class TwoStateGene:
                        k=k2,
                        labels=dict(name=protein_name+' translation'),
                        atp_sensitive=True,
+                       carbon_sensitive=True,
                        ribosome_sensitive=True),
 
             # protein decay
@@ -282,6 +295,7 @@ class TwoStateGene:
                        k=g2,
                        labels=dict(name=protein_name+' decay'),
                        atp_sensitive=True,
+                       carbon_sensitive=False,
                        ribosome_sensitive=False)]
 
 
@@ -327,6 +341,7 @@ class SimpleGene:
                   k=g,
                   labels=dict(name=name.upper() + ' decay'),
                   atp_sensitive=True,
+                  carbon_sensitive=False,
                   ribosome_sensitive=False,
                   growth_dependence=growth_dependence)
 

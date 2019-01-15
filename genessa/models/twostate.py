@@ -177,6 +177,7 @@ class TwoStateCell(Cell):
                  input_dependence=input_dependence,
                  k=k,
                  atp_sensitive=False,
+                 carbon_sensitive=False,
                  ribosome_sensitive=False,
                  labels=labels)
 
@@ -187,8 +188,9 @@ class TwoStateCell(Cell):
                                     actuator,
                                     target,
                                     k=1.,
-                                    atp_sensitive=True,
-                                    ribosome_sensitive=True,
+                                    atp_sensitive=False,
+                                    carbon_sensitive=False,
+                                    ribosome_sensitive=False,
                                     **labels):
         """
         Add transcriptional repressor.
@@ -236,6 +238,7 @@ class TwoStateCell(Cell):
                  input_dependence=input_dependence,
                  k=k,
                  atp_sensitive=atp_sensitive,
+                 carbon_sensitive=carbon_sensitive,
                  ribosome_sensitive=ribosome_sensitive,
                  labels=labels)
 

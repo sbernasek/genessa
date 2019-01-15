@@ -164,6 +164,7 @@ class Reaction:
                  temperature_sensitive=True,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
+                 carbon_sensitive=False,
                  growth_dependence=0,
                  labels={}):
         """
@@ -182,6 +183,8 @@ class Reaction:
             atp_sensitive (bool) - if True, rate scales with metabolism
 
             ribosome_sensitive (bool) - if True, rate scales with ribosomes
+
+            carbon_sensitive (bool) - if True, rate scales with carbon availability
 
             growth_dependence (int) - log k / log growth
 
@@ -210,6 +213,7 @@ class Reaction:
         self.temperature_sensitive = temperature_sensitive
         self.atp_sensitive = atp_sensitive
         self.ribosome_sensitive = ribosome_sensitive
+        self.carbon_sensitive = carbon_sensitive
         self.growth_dependence = growth_dependence
 
         # assign labels

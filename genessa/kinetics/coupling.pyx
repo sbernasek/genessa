@@ -458,6 +458,7 @@ class Coupling(Reaction):
                  temperature_sensitive=True,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
+                 carbon_sensitive=False,
                  parameters=None,
                  labels={}):
         """
@@ -483,6 +484,8 @@ class Coupling(Reaction):
 
             ribosome_sensitive (bool) - if True, rate scales with ribosomes
 
+            carbon_sensitive (bool) - if True, rate scales with carbon availability
+
             labels (dict) - additional labels
 
         """
@@ -493,6 +496,7 @@ class Coupling(Reaction):
                          temperature_sensitive=temperature_sensitive,
                          atp_sensitive=atp_sensitive,
                          ribosome_sensitive=ribosome_sensitive,
+                         carbon_sensitive=carbon_sensitive,
                          labels=labels)
 
         # add repressors
@@ -557,6 +561,7 @@ class Coupling(Reaction):
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
                   ribosome_sensitive=self.ribosome_sensitive,
+                  carbon_sensitive=self.carbon_sensitive,
                   labels=self.labels)
 
         return Coupling(s, p, **kw)

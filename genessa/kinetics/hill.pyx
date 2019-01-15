@@ -436,6 +436,7 @@ class Hill(Reaction):
                  temperature_sensitive=False,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
+                 carbon_sensitive=False,
                  growth_dependence=0,
                  parameters=None,
                  labels={}):
@@ -469,6 +470,8 @@ class Hill(Reaction):
 
             ribosome_sensitive (bool) - if True, scale rate with ribosomes
 
+            carbon_sensitive (bool) - if True, scale rate with carbon availability
+
             growth_dependence (int) - log k / log growth
 
             labels (dict) - additional labels
@@ -482,6 +485,7 @@ class Hill(Reaction):
                          temperature_sensitive=temperature_sensitive,
                          atp_sensitive=atp_sensitive,
                          ribosome_sensitive=ribosome_sensitive,
+                         carbon_sensitive=carbon_sensitive,
                          growth_dependence=growth_dependence,
                          labels=labels)
 
@@ -565,6 +569,7 @@ class Hill(Reaction):
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
                   ribosome_sensitive=self.ribosome_sensitive,
+                  carbon_sensitive=self.carbon_sensitive,
                   parameters=self.parameters,
                   labels=self.labels)
 

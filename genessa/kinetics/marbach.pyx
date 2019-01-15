@@ -647,6 +647,7 @@ class Transcription(Reaction):
                  temperature_sensitive=True,
                  atp_sensitive=True,
                  ribosome_sensitive=False,
+                 carbon_sensitive=False,
                  labels={}):
 
         # add regulatory modules
@@ -666,6 +667,7 @@ class Transcription(Reaction):
                          temperature_sensitive=temperature_sensitive,
                          atp_sensitive=atp_sensitive,
                          ribosome_sensitive=ribosome_sensitive,
+                         carbon_sensitive=carbon_sensitive,
                          labels=labels)
 
         # add k and alpha
@@ -710,6 +712,7 @@ class Transcription(Reaction):
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
                   ribosome_sensitive=self.ribosome_sensitive,
+                  carbon_sensitive=self.carbon_sensitive,
                   labels=self.labels)
 
         return self.__class__(s, modules, **kw)

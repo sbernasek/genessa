@@ -169,6 +169,7 @@ class MassAction(Reaction):
                  temperature_sensitive=True,
                  atp_sensitive=False,
                  ribosome_sensitive=False,
+                 carbon_sensitive=False,
                  growth_dependence=0,
                  parameters=None,
                  labels={}):
@@ -191,6 +192,8 @@ class MassAction(Reaction):
 
             ribosome_sensitive (bool) - if True, rate scales with ribosomes
 
+            carbon_sensitive (bool) - if True, rate scales with carbon availability
+
             growth_dependence (int) - log k / log growth
 
             labels (dict) - additional labels
@@ -209,6 +212,7 @@ class MassAction(Reaction):
                          temperature_sensitive=temperature_sensitive,
                          atp_sensitive=atp_sensitive,
                          ribosome_sensitive=ribosome_sensitive,
+                         carbon_sensitive=carbon_sensitive,
                          growth_dependence=growth_dependence,
                          labels=labels)
 
@@ -244,6 +248,7 @@ class MassAction(Reaction):
                   temperature_sensitive=self.temperature_sensitive,
                   atp_sensitive=self.atp_sensitive,
                   ribosome_sensitive=self.ribosome_sensitive,
+                  carbon_sensitive=self.carbon_sensitive,
                   growth_dependence=self.growth_dependence,
                   parameters=self.parameters,
                   labels=self.labels)

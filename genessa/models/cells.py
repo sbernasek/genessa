@@ -343,7 +343,8 @@ class Cell(Network):
         Kd=1.,
         temperature_sensitive=True,
         atp_sensitive=True,
-        ribosome_sensitive=True,
+        carbon_sensitive=False,
+        ribosome_sensitive=False,
         **labels):
         """
         Add transcript degradation term based on Michaelis Menten kinetics.
@@ -361,6 +362,8 @@ class Cell(Network):
             temperature_sensitive (bool) - scale rate with temperature
 
             atp_sensitive (bool) - scale rate with metabolism
+
+            carbon_sensitive (bool) - scale rate with carbon availability
 
             ribosome_sensitive (bool) - scale rate with ribosomes
 
@@ -393,9 +396,10 @@ class Cell(Network):
                    input_dependence,
                    k=k,
                    k_m=Kd,
-                   temperature_sensitive=True,
-                   atp_sensitive=True,
-                   ribosome_sensitive=True,
+                   temperature_sensitive=temperature_sensitive,
+                   atp_sensitive=atp_sensitive,
+                   carbon_sensitive=carbon_sensitive,
+                   ribosome_sensitive=ribosome_sensitive,
                    labels=labels)
 
         # add reaction
@@ -409,7 +413,8 @@ class Cell(Network):
         modulation=None,
         temperature_sensitive=True,
         atp_sensitive=True,
-        ribosome_sensitive=True,
+        carbon_sensitive=False,
+        ribosome_sensitive=False,
         **labels):
         """
         Add protein degradation term based on Michaelis Menten kinetics.
@@ -429,6 +434,8 @@ class Cell(Network):
             temperature_sensitive (bool) - scale rate with temperature
 
             atp_sensitive (bool) - scale rate with metabolism
+
+            carbon_sensitive (bool) - scale rate with carbon availability
 
             ribosome_sensitive (bool) - scale rate with ribosomes
 
@@ -470,6 +477,7 @@ class Cell(Network):
                    rate_modifier=rate_modifier,
                    temperature_sensitive=temperature_sensitive,
                    atp_sensitive=atp_sensitive,
+                   carbon_sensitive=carbon_sensitive,
                    ribosome_sensitive=ribosome_sensitive,
                    labels=labels)
 
@@ -482,7 +490,8 @@ class Cell(Network):
         mode='protein',
         k=1.,
         temperature_sensitive=True,
-        atp_sensitive=True,
+        atp_sensitive=2,
+        carbon_sensitive=2,
         ribosome_sensitive=True,
         growth_dependence=0,
         **labels):
@@ -502,6 +511,8 @@ class Cell(Network):
             temperature_sensitive (bool) - scale rate with temperature
 
             atp_sensitive (bool) - scale rate with metabolism
+
+            carbon_sensitive (bool) - scale rate with carbon availability
 
             ribosome_sensitive (bool) - scale rate with ribosomes
 
@@ -537,6 +548,7 @@ class Cell(Network):
             k=k,
             temperature_sensitive=temperature_sensitive,
             atp_sensitive=atp_sensitive,
+            carbon_sensitive=carbon_sensitive,
             ribosome_sensitive=ribosome_sensitive,
             growth_dependence=growth_dependence,
             labels=labels)

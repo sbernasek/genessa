@@ -122,6 +122,7 @@ class SimpleCell(Cell):
                  input_dependence=input_dependence,
                  k=k,
                  atp_sensitive=False,
+                 carbon_sensitive=False,
                  ribosome_sensitive=False,
                  growth_dependence=growth_dependence,
                  labels=labels)
