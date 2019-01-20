@@ -66,7 +66,13 @@ Additionally, GeneSSA includes templates for common gene regulatory networks:
 Example Usage
 =============
 
-We have included a number of [Jupyter notebooks](https://github.com/sebastianbernasek/genessa/tree/master/notebooks) with detailed examples of how to get started with using GeneSSA.
+We have included a series of [Jupyter notebooks](https://github.com/sebastianbernasek/genessa/tree/master/notebooks) with some examples of how to get started with using GeneSSA. These examples include:
+
+  * [First-order decay](https://github.com/sebastianbernasek/genessa/tree/master/notebooks/first_order_decay.ipynb)
+
+  * [A birth-death process](https://github.com/sebastianbernasek/genessa/tree/master/notebooks/birth_death_process.ipynb)
+
+  * [Coupled oscillators](https://github.com/sebastianbernasek/genessa/tree/master/notebooks/oscillators.ipynb)
 
 
 Further Examples
