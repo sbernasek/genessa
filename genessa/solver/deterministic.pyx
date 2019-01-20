@@ -150,7 +150,7 @@ class DeterministicSimulation:
 
     """
 
-    def __init__(self, network, condition):
+    def __init__(self, network, condition=None):
         """
         Instantiate deterministic simulation for a given network.
 
@@ -303,7 +303,8 @@ class DeterministicSimulation:
         assert (ic.size==self.N), 'Initial Condition is the wrong size.'
 
         # apply network constraints to initial condition
-        self.network.constrain_ic(ic)
+        if self.network.constrain_ic is not None:
+            self.network.constrain_ic(ic)
 
         # if no initial integrator condition is provided, assume zeros
         if integrator_ic is None:
@@ -317,7 +318,7 @@ class DeterministicSimulation:
 
         # if no input function, use zeros
         if signal is None:
-            signal = cSignal()
+            signal = cSignal(0.)
             assert self.I == 1, 'Signal dimensions do not match system inputs.'
 
         # define derivative function

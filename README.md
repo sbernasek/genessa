@@ -2,7 +2,9 @@
 GeneSSA Overview
 ================
 
-GeneSSA provides a framework for stochastic simulation of gene regulatory networks.
+GeneSSA provides a framework for stochastic simulation of dynamic processes. We acknowledge that there are many other excellent tools designed for simulating stochastic dynamics. The main advantage of GeneSSA is its barebones implementation, which allow for rapid large scale simulation of a wide variety of systems. While GeneSSA was developed with biological circuits in mind; the code is well suited to any system exhibiting Markovian dynamics.
+
+Please keep in mind that this package was developed for internal use, and as such we offer no guarantees regarding its performance.
 
 
 Installation
@@ -10,7 +12,7 @@ Installation
 
 First, download the [latest distribution](https://github.com/sebastianbernasek/genessa/archive/v0.1.tar.gz).
 
-Before attempting to install GeneSSA, make sure you have installed all necessary dependencies.
+Before attempting to install GeneSSA, we suggest creating a clean virtual environment and installing all necessary dependencies ahead of time. While the distribution includes a pre-compiled version of the cythonized solver code, we can't guarantee that it will run correctly on all platforms. For best results, we recommend that you install cython before installing GeneSSA.
 
 
 System Requirements
@@ -18,10 +20,10 @@ System Requirements
 
  - Python 3.6+
  - [NumPy](https://www.scipy.org/): ``pip install numpy``
- - [Cython](http://cython.org/): ``pip install cython`` (optional)
+ - [Cython](http://cython.org/): ``pip install cython`` (optional, but recommended)
 
 
-Install Binding
+Install GeneSSA
 ---------------
 
 The simplest method is to install via ``pip``:
@@ -41,75 +43,33 @@ To manually compile the GeneSSA package, unpack the tarball and build inplace:
 GeneSSA Modules
 ===============
 
-GeneSSA consists of a core model supported by several additional tools.
+The GeneSSA simulation platform consists of several core modules:
 
-The core modeling components are implemented as cython extension modules in ``binding.model``. These extension modules include:
+  * ``genessa.kinetics`` provides objects for representing various types of interactions.
 
-  * ``binding.model.elements`` provides an Element base class for constructing individual binding elements.
+  * ``genessa.networks`` provides objects for constructing a network of interactions.
 
-  * ``binding.model.trees`` provides a Tree base class for constructing a microstate enumeration tree.
+  * ``genessa.signals`` provides objects for constructing exogenous signals (e.g. perturbations).
 
-  * ``binding.model.partitions`` provides PartitionFunction base class for evaluating the statistical frequency of all binding microstates for a given binding element.
+  * ``genessa.solver`` provides a basic implementation of the stochastic simulation algorithm (Gillespie 1977).
 
-  * ``binding.model.parallel`` provides an interface to the python ``multiprocessing`` module. Microstate enumeration is parallelized by subprocessing individual branches of a microstate enumeration tree below a specified cut depth.
+  * ``genessa.timeseries`` provides objects for storing and analyzing multidimensional timeseries.
 
+Additionally, GeneSSA includes templates for common gene regulatory networks:
 
-The supporting python modules include:
+  * ``genessa.models`` provides base classes for easy construction of several different types of GRNs.
 
-  * ``binding.analysis`` provides an interface for generating equilibrium binding site occupancy phase diagrams and titration contours.
-
-  * ``binding.utilities`` provides tools for converting experimentally measured equilibrium dissociation constants to binding energies that may be used as model parameters.
+  * ``genessa.demo`` provides some fully functional example networks.
 
 
 
 Example Usage
 =============
 
-Define transcription factor binding energies:
-
-    # binding energy to strong sites for TF species 1, 2, ... (kcal/mol)
-    alpha = [-10, -10, ...]
-
-    # binding energy to weak sites for TF species 1, 2, ... (kcal/mol)
-    beta = [-6, -6, ...]
-
-    # stabilization energy from adjacent sites bound by same TF species (kcal/mol)
-    gamma = [-8, -8, ...]
-
-    binding_energies = dict(alpha=alpha, beta=beta, gamma=gamma)
-
-
-Define a DNA binding element:
-
-    from binding.model.elements import Element
-
-    element_size = 12
-    strong_sites = (0,)
-
-    # instantiate binding element
-    element = Element(Ns=element_size,
-                      params=binding_energies,
-                      ets=strong_sites)
-
-
-Evaluate equilibrium binding site occupancies or a range of TF concentrations:
-
-    from binding.model.partitions import PartitionFunction
-    import numpy as np
-
-    # define TF concentrations
-    C = np.linspace(0, 100, 100) * 1E-9
-    xx, yy = np.meshgrid(*(C, C), indexing='xy')
-    concentrations = np.stack((xx.T, yy.T)).reshape(2, -1).T
-
-    # instantiate partition function
-    pf = PartitionFunction(element, concentrations)
-
-    # evaluate equilibrium binding site occupancies
-    occupancies = pf.c_get_occupancies()
+We have included a number of Jupyter notebooks with detailed examples of how to get started with using GeneSSA.
 
 
 Further Examples
 ----------------
 
-For an additional usage example, please refer to Figure 3 of our [study](https://github.com/sebastianbernasek/pnt_yan_ratio) of Pnt and Yan expression in the *Drosophila* eye.
+For more detailed usage examples, please refer to the simulations we performed as part of our [study](https://github.com/sebastianbernasek/feedback_and_metabolism) of the relationship between metabolic conditions and developmental gene expression.

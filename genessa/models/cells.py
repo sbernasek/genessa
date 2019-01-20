@@ -65,53 +65,6 @@ class Cell(Network):
         # add genes
         self.add_genes(genes, **kwargs)
 
-    @property
-    def ic(self):
-        """ Default initial condition. """
-        return np.zeros(self.N, dtype=np.int64)
-
-    def constrain_ic(self, ic):
-        """
-        Constrains initial condition.
-
-        Args:
-
-            ic (np.ndarray[double]) - initial condition
-
-        """
-        pass
-
-    def get_ic(self, ic=None):
-        """
-        Get initial condition for cell.
-
-        Args:
-
-            ic (array like or tuple) - initial condition
-
-        Returns:
-
-            ic (np.ndarray) - initial condition
-
-        """
-
-        # if IC is none, assume all genes in ground state
-        if ic is None:
-            ic = np.zeros(self.N, dtype=np.int64)
-
-        # if IC is mean,var tuple, sample ICs from gaussian
-        elif type(ic) == tuple:
-            mean, var = ic
-            ic = np.random.normal(mean, np.sqrt(var), size=mean.size).astype(int)
-            ic[ic<0] = 0
-
-        return ic
-
-    @property
-    def node_key(self):
-        """ Dictionary mapping node positional indices to node IDs. """
-        return dict(enumerate(self.nodes))
-
     def add_genes(self, names, **kwargs):
         """
         Add multiple genes.

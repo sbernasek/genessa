@@ -49,3 +49,6 @@ ctypedef fused cSignalType:
     cSquarePulse
     cSquareWave
     cMultiPulse
+
+
+

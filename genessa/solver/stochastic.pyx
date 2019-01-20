@@ -516,7 +516,7 @@ class StochasticSimulation(DeterministicSimulation):
         I (unsigned int) - number of external inputs
 
     """
-    def __init__(self, network, condition, seed=None):
+    def __init__(self, network, condition=None, seed=None):
         """
         Instantiate deterministic simulation for a given network.
 
@@ -582,10 +582,11 @@ class StochasticSimulation(DeterministicSimulation):
         if ic is None:
             ic = self.network.ic.astype(np.uint32)
         else:
-            ic = ic.astype(np.uint32)
+            ic = np.asarray(ic, dtype=np.uint32)
 
         # apply network constraints to initial condition
-        self.network.constrain_ic(ic)
+        if self.network.constrain_ic is not None:
+            self.network.constrain_ic(ic)
 
         # cast integrator initial condition to 64-bit float
         if integrator_ic is None:
@@ -596,6 +597,10 @@ class StochasticSimulation(DeterministicSimulation):
         # check that initial conditions have the correct dimensions
         assert (ic.size==self.N), 'Wrong IC dimensions.'
         assert (integrator_ic.size==self.N), 'Wrong Integrator IC dimensions.'
+
+        if signal is None:
+            signal = cSignal(0.)
+            assert self.I == 1, 'Signal dimensions do not match system inputs.'
 
         # set default seed (not used if negative)
         if seed is None:
@@ -697,9 +702,12 @@ class MonteCarloSimulation(StochasticSimulation):
         elif type(ic) == FunctionType:
             f = lambda: ic()
 
+        elif ic is None:
+            f = lambda: None
+
         # otherwise repeat the same initial condition
         else:
-            f = lambda: ic
+            f = lambda: np.asarray(ic, dtype=np.uint32)
 
         return f
 
@@ -739,7 +747,8 @@ class MonteCarloSimulation(StochasticSimulation):
             integrator_ic = self.integrator_ic()
 
             # check that initial condition is positive
-            assert (ic<0).sum() == 0, 'Negative IC on trial {:d}'.format(i)
+            if ic is not None:
+                assert (ic<0).sum() == 0, 'Negative IC on trial {:d}'.format(i)
 
             # run simulation
             times, states = self.simulate(

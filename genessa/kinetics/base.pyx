@@ -267,7 +267,10 @@ class Reaction:
     @property
     def name(self):
         """ Reaction name. """
-        return self.labels['name']
+        if 'name' in self.labels.keys():
+            return self.labels['name']
+        else:
+            return None
 
     @property
     def perturbed(self):
