@@ -57,8 +57,10 @@ cdef class cSignal:
         # get first non-null argument
         if len(args) > 0:
             argument = args[0]
-        else:
+        elif len(kwargs) > 0:
             argument = [v for k,v in kwargs.items() if v is not None][0]
+        else:
+            argument = 1.
 
         # check whether value is a collection (for multi-valued subclasses)
         try:
@@ -390,6 +392,9 @@ cdef class cMultiPulse(cSignal):
             self.t_off[i] = t_off[i]
             self.off[i] = off[i]
             self.on[i] = on[i]
+
+        # populate memory with signal update times
+        for i in xrange(self.I*2):
             self.update_times[i] = update_times[i]
 
         # set values to off state
@@ -420,7 +425,7 @@ cdef class cMultiPulse(cSignal):
         if not self.on:
             raise MemoryError('Could not allocate memory for on values.')
 
-        self.update_times = <double*> PyMem_Malloc(self.I * sizeof(double))
+        self.update_times = <double*> PyMem_Malloc(2 * self.I * sizeof(double))
         if not self.update_times:
             raise MemoryError('Could not allocate memory for update times.')
 
@@ -478,8 +483,13 @@ cdef class cMultiPulse(cSignal):
                 self.value[index] = self.off[index]
 
         # determine next update
-        for index in xrange(self.I):
+        for index in xrange(2*self.I):
             next_update = self.update_times[index]
             if next_update > t:
                 self.next_update = next_update
                 break
+
+        # if past the last update, set update to end
+        if index == (2*self.I-1) and next_update <= t:
+            self.next_update = DBL_MAX
+
