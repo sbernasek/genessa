@@ -66,7 +66,7 @@ Additionally, GeneSSA includes templates for common gene regulatory networks:
 Example Usage
 =============
 
-We have included a number of Jupyter notebooks with detailed examples of how to get started with using GeneSSA.
+We have included a number of [Jupyter notebooks](https://github.com/sebastianbernasek/genessa/tree/master/notebooks) with detailed examples of how to get started with using GeneSSA.
 
 
 Further Examples
