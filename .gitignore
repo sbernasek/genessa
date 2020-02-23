@@ -2,6 +2,7 @@ dist/*.egg
 *.pyc
 *.c
 *.so
+.eggs/
 build/*
 ipynb_checkpoints/*
 genessa.egg-info/

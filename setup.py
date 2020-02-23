@@ -385,6 +385,9 @@ setup(
     zip_safe = False,
 
     # Add custom data files not inside a Python package
-    data_files = datafiles
-)
+    data_files = datafiles,
 
+    # Add testing suite
+    tests_require=['nose'],
+    test_suite='nose.collector'
+)

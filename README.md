@@ -10,7 +10,7 @@ Please keep in mind that this package was developed for internal use, and as suc
 Installation
 ============
 
-First, download the [latest distribution](https://github.com/sebastianbernasek/genessa/archive/v0.1.tar.gz).
+First, download the [latest distribution](https://github.com/sebastianbernasek/genessa/archive/0.1.tar.gz).
 
 Before attempting to install GeneSSA, we suggest creating a clean virtual environment and installing all necessary dependencies ahead of time. While the distribution includes a pre-compiled version of the cythonized solver code, we can't guarantee that it will run correctly on all platforms. For best results, we recommend that you install cython before installing GeneSSA.
 
@@ -78,4 +78,4 @@ We have included a series of [Jupyter notebooks](https://github.com/sebastianber
 Further Examples
 ----------------
 
-For more detailed usage examples, please refer to the simulations we performed as part of our [study](https://github.com/sebastianbernasek/feedback_and_metabolism) of the relationship between metabolic conditions and developmental gene expression.
+For more detailed usage examples, please refer to the simulations we performed as part of our [study](https://github.com/sebastianbernasek/gram) of the relationship between metabolic conditions and developmental gene expression.
