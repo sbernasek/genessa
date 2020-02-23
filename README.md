@@ -2,7 +2,7 @@
 GeneSSA Overview
 ================
 
-GeneSSA provides a framework for stochastic simulation of dynamic processes. We acknowledge that there are many other excellent tools designed for simulating stochastic dynamics. The main advantage of GeneSSA is its barebones implementation, which allow for rapid large scale simulation of a wide variety of systems. While GeneSSA was developed with biological circuits in mind; the code is well suited to any system exhibiting Markovian dynamics.
+GeneSSA provides a framework for stochastic simulation of dynamic processes, with a particular emphasis on chemical reaction networks and gene regulatory networks. We acknowledge that there are many other excellent tools designed for simulating stochastic dynamics. The main advantage of GeneSSA is its barebones implementation, which allow for rapid large scale simulation of a wide variety of systems. While GeneSSA was developed with biological circuits in mind; the code is well suited to any system exhibiting Markovian dynamics.
 
 Please keep in mind that this package was developed for internal use, and as such we offer no guarantees regarding its performance.
 
@@ -78,4 +78,5 @@ We have included a series of [Jupyter notebooks](https://github.com/sebastianber
 Further Examples
 ----------------
 
-For more detailed usage examples, please refer to the simulations we performed as part of our [study](https://github.com/sebastianbernasek/gram) of the relationship between metabolic conditions and developmental gene expression.
+For more detailed usage examples, please refer to the [simulations](https://github.com/sebastianbernasek/gram) we performed as part of our [study](https://www.cell.com/cell/pdf/S0092-8674(19)30686-5.pdf) of the relationship between metabolic conditions and developmental gene expression.
+
