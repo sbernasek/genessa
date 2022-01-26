@@ -131,10 +131,14 @@ class TwoStateCell(Cell):
         self.proteins.update({k: v+shift for k,v in gene.proteins.items()})
 
     def add_activation(self,
-                        gene,
-                        activator,
-                        k=1,
-                        **labels):
+        gene,
+        activator,
+        k=1,
+        atp_sensitive=False,
+        carbon_sensitive=False,
+        ribosome_sensitive=False,
+        **labels
+        ):
         """
         Add gene activation reaction.
 
@@ -176,22 +180,23 @@ class TwoStateCell(Cell):
                  propensity=propensity,
                  input_dependence=input_dependence,
                  k=k,
-                 atp_sensitive=False,
-                 carbon_sensitive=False,
-                 ribosome_sensitive=False,
+                 atp_sensitive=atp_sensitive,
+                 carbon_sensitive=carbon_sensitive,
+                 ribosome_sensitive=ribosome_sensitive,
                  labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
 
     def add_transcriptional_repressor(self,
-                                    actuator,
-                                    target,
-                                    k=1.,
-                                    atp_sensitive=False,
-                                    carbon_sensitive=False,
-                                    ribosome_sensitive=False,
-                                    **labels):
+            actuator,
+            target,
+            k=1.,
+            atp_sensitive=False,
+            carbon_sensitive=False,
+            ribosome_sensitive=False,
+            **labels
+        ):
         """
         Add transcriptional repressor.
 
@@ -241,6 +246,102 @@ class TwoStateCell(Cell):
                  carbon_sensitive=carbon_sensitive,
                  ribosome_sensitive=ribosome_sensitive,
                  labels=labels)
+
+        # add reaction
+        self.reactions.append(rxn)
+
+    def add_transcriptional_promoter(
+        self,
+        gene,
+        k=1,
+        atp_sensitive=True,
+        carbon_sensitive=True,
+        ribosome_sensitive=False,
+        **labels
+        ):
+        """
+        Add transcriptional promoter reaction.
+
+        Args:
+
+            gene (str) - target gene name
+
+            k (float) - activation rate constant
+
+            labels (dict) - additional labels for reaction
+
+        """
+
+        # define reaction name
+        labels['name'] = gene+' transcription'
+
+        # define stoichiometry
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[self.transcripts[gene]] = 1
+
+        # define propensity
+        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity[self.genes[gene]] = 1
+
+        # define reaction
+        rxn = MassAction(
+            stoichiometry=stoichiometry,
+            propensity=propensity,
+            input_dependence=None,
+            k=k,
+            atp_sensitive=atp_sensitive,
+            carbon_sensitive=carbon_sensitive,
+            ribosome_sensitive=ribosome_sensitive,
+            labels=labels
+        )
+
+        # add reaction
+        self.reactions.append(rxn)
+
+    def add_translational_promoter(
+        self,
+        gene,
+        k=1,
+        atp_sensitive=True,
+        carbon_sensitive=True,
+        ribosome_sensitive=True,
+        **labels
+        ):
+        """
+        Add translational promoter reaction.
+
+        Args:
+
+            gene (str) - target gene name
+
+            k (float) - activation rate constant
+
+            labels (dict) - additional labels for reaction
+
+        """
+
+        # define reaction name
+        labels['name'] = gene+' translation'
+
+        # define stoichiometry
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[self.proteins[gene]] = 1
+
+        # define propensity
+        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity[self.transcripts[gene]] = 1
+
+        # define reaction
+        rxn = MassAction(
+            stoichiometry=stoichiometry,
+            propensity=propensity,
+            input_dependence=None,
+            k=k,
+            atp_sensitive=atp_sensitive,
+            carbon_sensitive=carbon_sensitive,
+            ribosome_sensitive=ribosome_sensitive,
+            labels=labels
+        )
 
         # add reaction
         self.reactions.append(rxn)

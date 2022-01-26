@@ -6,10 +6,15 @@ from cpython.array cimport array
 from copy import copy
 import numpy as np
 from array import array
-from scipy.misc import comb
 from functools import reduce
 from operator import mul, add
 from ..utilities import name_parameter
+
+try:  # SciPy >= 0.19
+    from scipy.special import comb, logsumexp
+except ImportError:
+    from scipy.misc import comb, logsumexp  # noqa 
+
 
 # cython intra-package imports
 from .base cimport cInputDependent
