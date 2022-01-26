@@ -34,14 +34,18 @@ class HillCell(Cell):
     """
 
     def add_transcription(self,
-                          gene,
-                          promoters=(),
-                          repressors=None,
-                          k=1,
-                          k_m=1,
-                          n=1,
-                          baseline=0.,
-                          **labels):
+            gene,
+            promoters=(),
+            repressors=None,
+            k=1,
+            k_m=1,
+            n=1,
+            baseline=0.,
+            atp_sensitive=True,
+            carbon_sensitive=True,
+            ribosome_sensitive=False,
+            **labels
+        ):
         """
         Add transcript synthesis reaction.
 
@@ -60,6 +64,12 @@ class HillCell(Cell):
             n (float) - hill coefficients
 
             baseline (float) - baseline transcription rate
+
+            atp_sensitive (int) - order of metabolism dependence
+
+            carbon_sensitive (int) - order of carbon availability dependence
+
+            ribosome_sensitive (int) - order of ribosome dependence
 
             labels (dict) - additional labels
 
@@ -97,20 +107,21 @@ class HillCell(Cell):
                    n=n,
                    baseline=baseline,
                    repressors=repressors,
-                   atp_sensitive=True,
-                   carbon_sensitive=True,
-                   ribosome_sensitive=False,
+                   atp_sensitive=atp_sensitive,
+                   carbon_sensitive=carbon_sensitive,
+                   ribosome_sensitive=ribosome_sensitive,
                    labels=labels)
 
         # add reaction
         self.reactions.append(rxn)
 
     def add_transcriptional_repressor(self,
-                                      actuators,
-                                      target,
-                                      k_m=1,
-                                      n=1,
-                                      **labels):
+            actuators,
+            target,
+            k_m=1,
+            n=1,
+            **labels
+        ):
         """
         Add transcriptional repressor.
 
@@ -156,3 +167,50 @@ class HillCell(Cell):
         for rxn in self.reactions:
             if rxn.type == 'Hill' and target in rxn.name:
                 rxn.add_repressor(repressor)
+
+    def add_translational_promoter(self,
+            gene,
+            k=1,
+            atp_sensitive=True,
+            carbon_sensitive=True,
+            ribosome_sensitive=True,
+            **labels
+        ):
+        """
+        Add translational promoter reaction.
+
+        Args:
+
+            gene (str) - target gene name
+
+            k (float) - activation rate constant
+
+            labels (dict) - additional labels for reaction
+
+        """
+
+        # define reaction name
+        labels['name'] = gene+' translation'
+
+        # define stoichiometry
+        stoichiometry = np.zeros(self.nodes.size, dtype=np.int64)
+        stoichiometry[self.proteins[gene]] = 1
+
+        # define propensity
+        propensity = np.zeros(self.nodes.size, dtype=np.int64)
+        propensity[self.transcripts[gene]] = 1
+
+        # define reaction
+        rxn = MassAction(
+            stoichiometry=stoichiometry,
+            propensity=propensity,
+            input_dependence=None,
+            k=k,
+            atp_sensitive=atp_sensitive,
+            carbon_sensitive=carbon_sensitive,
+            ribosome_sensitive=ribosome_sensitive,
+            labels=labels
+        )
+
+        # add reaction
+        self.reactions.append(rxn)

@@ -8,3 +8,4 @@ ipynb_checkpoints/*
 genessa.egg-info/
 debug/
 notebooks/.ipynb_checkpoints/
+*DS_Store
