@@ -328,7 +328,7 @@ if USE_CYTHON:
 
 setup(
     name = "genessa",
-    version = '0.1',
+    version = '0.2',
     author = "Sebastian Bernasek",
     author_email = "sebastian@u.northwestern.edu",
     url = "https://github.com/sebastianbernasek/genessa",
