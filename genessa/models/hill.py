@@ -1,6 +1,7 @@
 import numpy as np
 
 # intra-package python imports
+from ..kinetics.massaction import MassAction
 from ..kinetics.hill import Hill, Repressor
 from .cells import Cell
 

@@ -281,7 +281,7 @@ class TwoStateCell(Cell):
 
         # define propensity
         propensity = np.zeros(self.nodes.size, dtype=np.int64)
-        propensity[self.genes[gene]] = 1
+        propensity[self.on_states[gene]] = 1
 
         # define reaction
         rxn = MassAction(

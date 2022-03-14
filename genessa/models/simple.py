@@ -121,9 +121,9 @@ class SimpleCell(Cell):
                  propensity=propensity,
                  input_dependence=input_dependence,
                  k=k,
-                 atp_sensitive=False,
-                 carbon_sensitive=False,
-                 ribosome_sensitive=False,
+                 atp_sensitive=True,
+                 carbon_sensitive=True,
+                 ribosome_sensitive=True,
                  growth_dependence=growth_dependence,
                  labels=labels)
 
