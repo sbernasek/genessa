@@ -24,7 +24,7 @@ class Gene:
         reactions (list) - translation, mRNA decay, and protein decay reactions
 
     """
-    def __init__(self, name='gene', k=1, g1=1, g2=1):
+    def __init__(self, name='gene', k=1, g1=1, g2=1, include_promoters=True):
         """
         Create gene along with translation, mRNA decay, and protein decay reactions.
 
@@ -37,6 +37,8 @@ class Gene:
             g1 (float) - transcript decay rate constant
 
             g2 (float) - protein decay rate constant
+
+            include_promoters (bool) - indicates whether or not to include promoters
 
         """
 
@@ -52,34 +54,35 @@ class Gene:
         protein_decay = protein_name + ' decay'
 
         # define reactions
-        self.reactions = [
-
-            # transcript decay
-            MassAction([-1, 0],
-                       [1, 0],
-                       k=g1,
-                       labels=dict(name=mrna_decay),
-                       atp_sensitive=False,
-                       ribosome_sensitive=False,
-                       carbon_sensitive=False),
-
-            # protein synthesis
-            MassAction([0, 1],
-                       [1, 0],
-                       k=k,
-                       labels=dict(name=translation),
-                       atp_sensitive=True,
-                       ribosome_sensitive=True,
-                       carbon_sensitive=True),
-
-            # protein decay
-            MassAction([0, -1],
-                       [0, 1],
-                       k=g2,
-                       labels=dict(name=protein_decay),
-                       atp_sensitive=True,
-                       carbon_sensitive=False,
-                       ribosome_sensitive=False)]
+        self.reactions = [rxn for rxn in [
+        
+                    # transcript decay
+                    MassAction([-1, 0],
+                               [1, 0],
+                               k=g1,
+                               labels=dict(name=mrna_decay),
+                               atp_sensitive=False,
+                               ribosome_sensitive=False,
+                               carbon_sensitive=False),
+        
+                    # protein synthesis
+                    MassAction([0, 1],
+                               [1, 0],
+                               k=k,
+                               labels=dict(name=translation),
+                               atp_sensitive=True,
+                               ribosome_sensitive=True,
+                               carbon_sensitive=True) if include_promoters else None,
+        
+                    # protein decay
+                    MassAction([0, -1],
+                               [0, 1],
+                               k=g2,
+                               labels=dict(name=protein_decay),
+                               atp_sensitive=True,
+                               carbon_sensitive=False,
+                               ribosome_sensitive=False)
+                ] if rxn is not None]
 
 
 class LinearGene:
@@ -105,7 +108,7 @@ class LinearGene:
         reactions (list) - translation, mRNA decay, and protein decay reactions
 
     """
-    def __init__(self, name='gene', k1=1, k2=1, g0=1, g1=1, g2=1):
+    def __init__(self, name='gene', k1=1, k2=1, g0=1, g1=1, g2=1, include_promoters=True):
         """
         Create gene along with translation, mRNA decay, and protein decay reactions.
 
@@ -123,6 +126,8 @@ class LinearGene:
 
             g2 (float) - protein decay rate constant
 
+            include_promoters (bool) - indicates whether or not to include promoters
+
         """
 
         self.nodes = np.arange(3)
@@ -135,52 +140,52 @@ class LinearGene:
         protein_name = name.upper()
 
         # define reactions
-        self.reactions = [
-
-            # gene decay
-            MassAction([-1, 0, 0],
-                       [1, 0, 0],
-                       k=g0,
-                       labels=dict(name=gene_name+' off rate'),
-                       atp_sensitive=False,
-                       carbon_sensitive=False,
-                       ribosome_sensitive=False),
-
-            # transcript synthesis
-            MassAction([0, 1, 0],
-                       [1, 0, 0],
-                       k=k1,
-                       labels=dict(name=gene_name+' transcription'),
-                       atp_sensitive=True,
-                       carbon_sensitive=True,
-                       ribosome_sensitive=False),
-
-            # transcript decay
-            MassAction([0, -1, 0],
-                       [0, 1, 0],
-                       k=g1,
-                       labels=dict(name=gene_name+' decay'),
-                       atp_sensitive=False,
-                       carbon_sensitive=False,
-                       ribosome_sensitive=False),
-
-            # protein synthesis
-            MassAction([0, 0, 1],
-                       [0, 1, 0],
-                       k=k2,
-                       labels=dict(name=protein_name+' translation'),
-                       atp_sensitive=True,
-                       carbon_sensitive=True,
-                       ribosome_sensitive=True),
-
-            # protein decay
-            MassAction([0, 0, -1],
-                       [0, 0, 1],
-                       k=g2,
-                       labels=dict(name=protein_name+' decay'),
-                       atp_sensitive=True,
-                       carbon_sensitive=False,
-                       ribosome_sensitive=False)]
+        self.reactions = [rxn for rxn in [
+        
+                    # gene decay
+                    MassAction([-1, 0, 0],
+                               [1, 0, 0],
+                               k=g0,
+                               labels=dict(name=gene_name+' off rate'),
+                               atp_sensitive=False,
+                               carbon_sensitive=False,
+                               ribosome_sensitive=False),
+        
+                    # transcript synthesis
+                    MassAction([0, 1, 0],
+                               [1, 0, 0],
+                               k=k1,
+                               labels=dict(name=gene_name+' transcription'),
+                               atp_sensitive=True,
+                               carbon_sensitive=True,
+                               ribosome_sensitive=False) if include_promoters else None,
+        
+                    # transcript decay
+                    MassAction([0, -1, 0],
+                               [0, 1, 0],
+                               k=g1,
+                               labels=dict(name=gene_name+' decay'),
+                               atp_sensitive=False,
+                               carbon_sensitive=False,
+                               ribosome_sensitive=False),
+        
+                    # protein synthesis
+                    MassAction([0, 0, 1],
+                               [0, 1, 0],
+                               k=k2,
+                               labels=dict(name=protein_name+' translation'),
+                               atp_sensitive=True,
+                               carbon_sensitive=True,
+                               ribosome_sensitive=True) if include_promoters else None,
+        
+                    # protein decay
+                    MassAction([0, 0, -1],
+                               [0, 0, 1],
+                               k=g2,
+                               labels=dict(name=protein_name+' decay'),
+                               atp_sensitive=True,
+                               carbon_sensitive=False,
+                               ribosome_sensitive=False)] if rxn is not None]
 
 
 class TwoStateGene:
@@ -209,7 +214,7 @@ class TwoStateGene:
         reactions (list) - translation, mRNA decay, and protein decay reactions
 
     """
-    def __init__(self, name='gene', k0=0, k1=1, k2=1, g0=1, g1=1, g2=1):
+    def __init__(self, name='gene', k0=0, k1=1, k2=1, g0=1, g1=1, g2=1, include_promoters=True):
         """
         Create gene along with translation, mRNA decay, and protein decay reactions.
 
@@ -229,6 +234,8 @@ class TwoStateGene:
 
             g2 (float) - protein decay rate constant
 
+            include_promoters (bool) - indicates whether or not to include promoters
+
         """
 
         self.nodes = np.arange(4)
@@ -242,61 +249,61 @@ class TwoStateGene:
         protein_name = name.upper()
 
         # define reactions
-        self.reactions = [
-
-            # gene activation
-            MassAction([-1, 1, 0, 0],
-                       [1, 0, 0, 0],
-                       k=k0,
-                       labels=dict(name=gene_name+' on rate'),
-                       atp_sensitive=False,
-                       carbon_sensitive=False,
-                       ribosome_sensitive=False),
-
-            # gene deactivation
-            MassAction([1, -1, 0, 0],
-                       [0, 1, 0, 0],
-                       k=g0,
-                       labels=dict(name=gene_name+' off rate'),
-                       atp_sensitive=False,
-                       carbon_sensitive=False,
-                       ribosome_sensitive=False),
-
-            # transcript synthesis
-            MassAction([0, 0, 1, 0],
-                       [0, 1, 0, 0],
-                       k=k1,
-                       labels=dict(name=gene_name+' transcription'),
-                       atp_sensitive=True,
-                       carbon_sensitive=True,
-                       ribosome_sensitive=False),
-
-            # transcript decay
-            MassAction([0, 0, -1, 0],
-                       [0, 0, 1, 0],
-                       k=g1,
-                       labels=dict(name=gene_name+' decay'),
-                       atp_sensitive=False,
-                       carbon_sensitive=False,
-                       ribosome_sensitive=False),
-
-            # protein synthesis
-            MassAction([0, 0, 0, 1],
-                       [0, 0, 1, 0],
-                       k=k2,
-                       labels=dict(name=protein_name+' translation'),
-                       atp_sensitive=True,
-                       carbon_sensitive=True,
-                       ribosome_sensitive=True),
-
-            # protein decay
-            MassAction([0, 0, 0, -1],
-                       [0, 0, 0, 1],
-                       k=g2,
-                       labels=dict(name=protein_name+' decay'),
-                       atp_sensitive=True,
-                       carbon_sensitive=False,
-                       ribosome_sensitive=False)]
+        self.reactions = [rxn for rxn in [
+        
+                    # gene activation
+                    MassAction([-1, 1, 0, 0],
+                               [1, 0, 0, 0],
+                               k=k0,
+                               labels=dict(name=gene_name+' on rate'),
+                               atp_sensitive=False,
+                               carbon_sensitive=False,
+                               ribosome_sensitive=False) if include_promoters else None,
+        
+                    # gene deactivation
+                    MassAction([1, -1, 0, 0],
+                               [0, 1, 0, 0],
+                               k=g0,
+                               labels=dict(name=gene_name+' off rate'),
+                               atp_sensitive=False,
+                               carbon_sensitive=False,
+                               ribosome_sensitive=False),
+        
+                    # transcript synthesis
+                    MassAction([0, 0, 1, 0],
+                               [0, 1, 0, 0],
+                               k=k1,
+                               labels=dict(name=gene_name+' transcription'),
+                               atp_sensitive=True,
+                               carbon_sensitive=True,
+                               ribosome_sensitive=False) if include_promoters else None,
+        
+                    # transcript decay
+                    MassAction([0, 0, -1, 0],
+                               [0, 0, 1, 0],
+                               k=g1,
+                               labels=dict(name=gene_name+' decay'),
+                               atp_sensitive=False,
+                               carbon_sensitive=False,
+                               ribosome_sensitive=False),
+        
+                    # protein synthesis
+                    MassAction([0, 0, 0, 1],
+                               [0, 0, 1, 0],
+                               k=k2,
+                               labels=dict(name=protein_name+' translation'),
+                               atp_sensitive=True,
+                               carbon_sensitive=True,
+                               ribosome_sensitive=True) if include_promoters else None,
+        
+                    # protein decay
+                    MassAction([0, 0, 0, -1],
+                               [0, 0, 0, 1],
+                               k=g2,
+                               labels=dict(name=protein_name+' decay'),
+                               atp_sensitive=True,
+                               carbon_sensitive=False,
+                               ribosome_sensitive=False)] if rxn is not None]
 
 
 class SimpleGene:
