@@ -10,7 +10,7 @@ Please keep in mind that this package was developed for internal use, and as suc
 Installation
 ============
 
-First, download the [latest distribution](https://github.com/sebastianbernasek/genessa/archive/0.1.tar.gz).
+First, download the [latest distribution](https://github.com/sebastianbernasek/genessa/archive/0.3.tar.gz).
 
 Before attempting to install GeneSSA, we suggest creating a clean virtual environment and installing all necessary dependencies ahead of time. While the distribution includes a pre-compiled version of the cythonized solver code, we can't guarantee that it will run correctly on all platforms. For best results, we recommend that you install cython before installing GeneSSA.
 
@@ -28,14 +28,14 @@ Install GeneSSA
 
 The simplest method is to install via ``pip``:
 
-    pip install genessa-0.1.tar.gz
+    pip install genessa-0.3.tar.gz
 
 The core solver is implemented in cython, with the relevant extension modules residing in ``genessa/solver/*.pyx`` and ``genessa/solver/*.pxd``. These extension modules must be compiled prior to runtime. Upon installation of ``genessa``, the package installer will attempt to use a local cython installation to compile the extension modules. If no cython installation is found, pre-compiled versions are automatically imported from the ``genessa`` source distribution. Note that compilation has only been tested in macOS.
 
 To manually compile the GeneSSA package, unpack the tarball and build inplace:
 
-    tar -xzf genessa-0.1.tar.gz
-    cd genessa-0.1
+    tar -xzf genessa-0.3.tar.gz
+    cd genessa-0.3
     python setup.py build_ext --inplace
 
 
